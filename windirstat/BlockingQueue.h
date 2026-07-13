@@ -33,6 +33,10 @@ class BlockingQueue final
     bool m_started = false;
     bool m_suspended = false;
     bool m_cancelled = false;
+    // Lock-free mirror of m_cancelled so long-running scan operations (MFT reads,
+    // directory enumeration) can poll for cancellation cheaply on every iteration
+    // without contending on m_mutex. Set alongside m_cancelled; reset in ResetQueue.
+    std::atomic<bool> m_cancelledSignal{ false };
     bool m_exitOnAllIdle = true;
 
     bool AllThreadsIdling() const noexcept
@@ -101,6 +105,7 @@ public:
         if (m_started && AllThreadsIdling() && m_queue.empty() && m_exitOnAllIdle)
         {
             m_cancelled = true;
+            m_cancelledSignal.store(true, std::memory_order_relaxed);
             m_pushed.notify_all();
             return std::nullopt;
         }
@@ -183,6 +188,26 @@ public:
         }
     }
 
+    // Signal cancellation without blocking to join worker threads. Used at the very
+    // start of shutdown so that workers stuck in long, otherwise-uninterruptible
+    // operations (MFT reads, huge-directory enumeration) break out promptly and can
+    // reach an idle checkpoint. Records the stop reason up front so WaitForCompletion
+    // returns the correct reason even though CancelExecution runs later.
+    void SignalCancellation(const int stopReason = -1)
+    {
+        std::scoped_lock lock(m_mutex);
+        if (stopReason != -1) m_stopReason = stopReason;
+        m_cancelled = true;
+        m_cancelledSignal.store(true, std::memory_order_relaxed);
+        m_waiting.notify_all();
+        m_pushed.notify_all();
+    }
+
+    bool IsCancelled() const noexcept
+    {
+        return m_cancelledSignal.load(std::memory_order_relaxed);
+    }
+
     void CancelExecution(const int stopReason = -1)
     {
         // Start cancellation process
@@ -190,6 +215,7 @@ public:
         {
             if (stopReason != -1) m_stopReason = stopReason;
             m_cancelled = true;
+            m_cancelledSignal.store(true, std::memory_order_relaxed);
             m_waiting.notify_all();
             m_pushed.notify_all();
         }
@@ -232,6 +258,7 @@ public:
         m_suspended = false;
         m_started = false;
         m_cancelled = false;
+        m_cancelledSignal.store(false, std::memory_order_relaxed);
         m_totalWorkerThreads = totalWorkerThreads;
         m_threads.clear();
         m_threads.reserve(m_totalWorkerThreads);
