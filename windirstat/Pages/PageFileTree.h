@@ -39,6 +39,7 @@ protected:
     void EnableButtons();
 
     BOOL m_pacmanAnimation = FALSE;
+    BOOL m_scanInProgressHighlight = FALSE;
     BOOL m_showTimeSpent = FALSE;
     BOOL m_showColumnFolders = FALSE;
     BOOL m_showColumnItems = FALSE;

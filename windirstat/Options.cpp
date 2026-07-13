@@ -46,6 +46,7 @@ Setting<bool> COptions::ListFullRowSelection(OptionsGeneral, L"ListFullRowSelect
 Setting<bool> COptions::ListGrid(OptionsGeneral, L"ListGrid", false);
 Setting<bool> COptions::ListStripes(OptionsGeneral, L"ListStripes", false);
 Setting<bool> COptions::PacmanAnimation(OptionsGeneral, L"PacmanAnimation", false);
+Setting<bool> COptions::ScanInProgressHighlight(OptionsFileTree, L"ScanInProgressHighlight", true);
 Setting<bool> COptions::ScanForDuplicates(OptionsDupeTree, L"ScanForDuplicates", false);
 Setting<bool> COptions::SearchWholePhrase(OptionsSearch, L"SearchWholePhrase", false);
 Setting<bool> COptions::SearchRegex(OptionsSearch, L"SearchRegex", false);

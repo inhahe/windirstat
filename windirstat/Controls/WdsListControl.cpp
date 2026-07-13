@@ -530,7 +530,7 @@ void CWdsListControl::DrawItem(LPDRAWITEMSTRUCT pdis)
             const std::wstring s = item->GetText(subitem);
 
             // Get the correct color in case of compressed or encrypted items
-            COLORREF textColor = item->GetItemTextColor();
+            COLORREF textColor = item->GetItemTextColor(subitem);
 
             // Except if the item is selected - in this case just use standard colors
             COLORREF backColorSub = backColor;

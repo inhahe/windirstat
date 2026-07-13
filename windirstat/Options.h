@@ -149,6 +149,11 @@ public:
     static Setting<bool> ListGrid;
     static Setting<bool> ListStripes;
     static Setting<bool> PacmanAnimation;
+    // While an item's subtree is still being scanned its size/percentage/file-count
+    // columns hold provisional values. When true (default) those cells show the live
+    // provisional values highlighted in grey; when false they show a "Working…"
+    // placeholder until the item is done.
+    static Setting<bool> ScanInProgressHighlight;
     static Setting<bool> ScanForDuplicates;
     static Setting<bool> SearchWholePhrase;
     static Setting<bool> SearchCase;

@@ -27,6 +27,7 @@ void CPageFileTree::DoDataExchange(CDataExchange* pDX)
 {
     CMFCPropertyPage::DoDataExchange(pDX);
     DDX_Check(pDX, IDC_PACMANANIMATION, m_pacmanAnimation);
+    DDX_Check(pDX, IDC_TREE_INPROGRESS_RED, m_scanInProgressHighlight);
     DDX_Check(pDX, IDC_SHOWTIMESPENT, m_showTimeSpent);
     DDX_Check(pDX, IDC_TREECOL_FOLDERS, m_showColumnFolders);
     DDX_Check(pDX, IDC_TREECOL_SIZE_PHYSICAL, m_showColumnSizePhysical);
@@ -55,6 +56,7 @@ BEGIN_MESSAGE_MAP(CPageFileTree, CMFCPropertyPage)
  ON_NOTIFY_RANGE(COLBN_CHANGED, IDC_COLORBUTTON0, IDC_COLORBUTTON7, OnColorChanged)
     ON_WM_VSCROLL()
     ON_BN_CLICKED(IDC_PACMANANIMATION, OnBnClickedSetModified)
+    ON_BN_CLICKED(IDC_TREE_INPROGRESS_RED, OnBnClickedSetModified)
     ON_BN_CLICKED(IDC_SHOWTIMESPENT, OnBnClickedSetModified)
     ON_BN_CLICKED(IDC_TREECOL_FOLDERS, OnBnClickedSetModified)
     ON_BN_CLICKED(IDC_TREECOL_ITEMS, OnBnClickedSetModified)
@@ -81,6 +83,7 @@ BOOL CPageFileTree::OnInitDialog()
     DarkMode::AdjustControls(GetSafeHwnd());
 
     m_pacmanAnimation = COptions::PacmanAnimation;
+    m_scanInProgressHighlight = COptions::ScanInProgressHighlight;
     m_showTimeSpent = COptions::ShowTimeSpent;
     m_showColumnFolders = COptions::ShowColumnFolders;
     m_showColumnItems = COptions::ShowColumnItems;
@@ -119,6 +122,7 @@ void CPageFileTree::OnOK()
 
     UpdateData();
     COptions::PacmanAnimation = (FALSE != m_pacmanAnimation);
+    COptions::ScanInProgressHighlight = (FALSE != m_scanInProgressHighlight);
     COptions::ShowTimeSpent = (FALSE != m_showTimeSpent);
     COptions::ShowColumnFolders = (FALSE != m_showColumnFolders);
     COptions::ShowColumnItems = (FALSE != m_showColumnItems);

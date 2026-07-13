@@ -58,6 +58,12 @@ public:
     {
         return DarkMode::WdsSysColor(COLOR_WINDOWTEXT);
     }
+    // Per-subitem text color. Defaults to the item color; override to colour
+    // individual columns differently (e.g. still-scanning values shown in grey).
+    virtual COLORREF GetItemTextColor(int /*subitem*/) const
+    {
+        return GetItemTextColor();
+    }
 
     // Comparison methods for sorting
     virtual int Compare(const CWdsListItem* other, int subitem) const = 0;

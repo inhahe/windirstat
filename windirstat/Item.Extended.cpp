@@ -41,12 +41,13 @@ bool CItem::DrawSubItem(const int subitem, CDC* pdc, CRect rc, const UINT state,
 
     const bool showReadJobs = MustShowReadJobs();
 
-    if (showReadJobs && !COptions::PacmanAnimation)
-    {
-        return false;
-    }
-
-    if (showReadJobs && IsDone())
+    // While this item's subtree is still being scanned the proportion is only
+    // provisional. When the "highlight unfinished values in grey" option is off,
+    // don't custom-draw the bar (returning false lets the default text renderer show
+    // the "Working…" placeholder — see GetText() for COL_SIZE_PROPORTION). When the
+    // option is on, draw the bar at its current provisional fraction, tinted grey.
+    const bool highlightUnfinished = showReadJobs && COptions::ScanInProgressHighlight;
+    if (showReadJobs && !highlightUnfinished)
     {
         return false;
     }
@@ -59,13 +60,6 @@ bool CItem::DrawSubItem(const int subitem, CDC* pdc, CRect rc, const UINT state,
 
     DrawSelection(CFileTreeControl::Get(), pdc, rc, state);
 
-    if (showReadJobs)
-    {
-        constexpr SIZE sizeDeflatePacman = { 1, 2 };
-        rc.DeflateRect(sizeDeflatePacman);
-        DrawPacman(pdc, rc);
-    }
-    else
     {
         rc.DeflateRect(2, 4);
         if (rc.Width() <= 0 || rc.Height() <= 0) return true;
@@ -93,7 +87,11 @@ bool CItem::DrawSubItem(const int subitem, CDC* pdc, CRect rc, const UINT state,
         // Derive palette for track, subtree bar, and absolute bar
         const COLORREF neutralBack  = dark ? RGB(40, 40, 40) : RGB(225, 225, 225);
         const double subtreeFraction = GetFraction();
-        const COLORREF color         = GetPercentageColor();
+        // Tint the whole bar grey while the value is still provisional (matches the
+        // grey text used for the other unfinished columns); otherwise use the palette.
+        const COLORREF color         = highlightUnfinished
+            ? (dark ? RGB(150, 150, 150) : RGB(96, 96, 96))
+            : GetPercentageColor();
         const COLORREF trackFill     = blendDark(neutralBack,  0.10, 0.06);
         const COLORREF trackBorder   = blendDark(trackFill,   0.18, 0.18);
         const COLORREF subtreeFill   = dark ? blendColor(trackFill, color, 0.68) : blendColor(trackFill, color, 0.48);
@@ -151,9 +149,26 @@ bool CItem::DrawSubItem(const int subitem, CDC* pdc, CRect rc, const UINT state,
 
 std::wstring CItem::GetText(const int subitem) const
 {
+    // For the size / percentage / file-count columns, an item that is still being
+    // scanned holds only provisional values. When the "highlight" style is enabled
+    // (the default) show the live value, drawn in grey (see GetItemTextColor); when
+    // it is disabled show a "Working…" placeholder until the item is done.
+    const auto inProgress = [this]() -> std::optional<std::wstring>
+    {
+        if (!IsDone() && !COptions::ScanInProgressHighlight)
+        {
+            return std::wstring(L"Working…");
+        }
+        return std::nullopt;
+    };
+
     switch (subitem)
     {
     case COL_SIZE_PHYSICAL:
+        if (const auto working = inProgress(); working.has_value())
+        {
+            return *working;
+        }
         if (IsTypeOrFlag(ITF_HARDLINK))
         {
             return L"⧉ " + FormatBytes(GetSizePhysicalRaw());
@@ -166,6 +181,10 @@ std::wstring CItem::GetText(const int subitem) const
 
     case COL_SIZE_LOGICAL:
     {
+        if (const auto working = inProgress(); working.has_value())
+        {
+            return *working;
+        }
         return FormatBytes(GetSizeLogical());
     }
 
@@ -184,21 +203,23 @@ std::wstring CItem::GetText(const int subitem) const
         break;
 
     case COL_SIZE_PROPORTION:
-        if (!IsDone())
+        if (!IsDone() && !COptions::ScanInProgressHighlight)
         {
-            if (GetReadJobs() == 1)
-            {
-                return Localization::Lookup(IDS_ONEREADJOB);
-            }
-
-            return Localization::Format(IDS_sREADJOBS, FormatCount(GetReadJobs()));
+            // While this item is still being scanned, show a plain "Working…"
+            // placeholder instead of the Pac-Man animation / read-job counts.
+            // (When the highlight option is on, DrawSubItem draws the provisional
+            // bar in grey instead, so no placeholder text is needed here.)
+            return L"Working…";
         }
         break;
 
     case COL_PERCENTAGE:
-        if (COptions::ShowTimeSpent && MustShowReadJobs() || IsRootItem())
+        // Always show an actual percentage here. (Upstream WinDirStat repurposed this
+        // column to show elapsed scan time as "[m:ss]" for the root / in-progress items,
+        // which rendered as a confusing "0:05" in the Percentage column.)
+        if (const auto working = inProgress(); working.has_value())
         {
-            return L"[" + FormatMilliseconds(GetTicksWorked() * 1000) + L"]";
+            return *working;
         }
         return FormatDouble(GetFraction() * 100) + L"%";
 
@@ -212,6 +233,10 @@ std::wstring CItem::GetText(const int subitem) const
     case COL_FILES:
         if (!IsTypeOrFlag(IT_FILE, IT_FREESPACE, IT_UNKNOWN, IT_HLINKS, IT_HLINKS_SET, IT_HLINKS_IDX))
         {
+            if (const auto working = inProgress(); working.has_value())
+            {
+                return *working;
+            }
             return FormatCount(GetFilesCount());
         }
         break;
@@ -268,6 +293,21 @@ COLORREF CItem::GetItemTextColor() const
 
     // The rest is not colored
     return CTreeListItem::GetItemTextColor();
+}
+
+COLORREF CItem::GetItemTextColor(const int subitem) const
+{
+    // When the "highlight unfinished values" option is active, draw the
+    // still-scanning columns (percentage, sizes, file count) in dark grey until
+    // the item is done being scanned.
+    if (COptions::ScanInProgressHighlight && !IsDone() &&
+        (subitem == COL_PERCENTAGE || subitem == COL_SIZE_PHYSICAL ||
+         subitem == COL_SIZE_LOGICAL || subitem == COL_FILES))
+    {
+        return DarkMode::IsDarkModeActive() ? RGB(150, 150, 150) : RGB(96, 96, 96);
+    }
+
+    return GetItemTextColor();
 }
 
 int CItem::CompareSibling(const CTreeListItem* tlib, const int subitem) const
