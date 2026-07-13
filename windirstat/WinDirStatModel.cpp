@@ -20,6 +20,7 @@
 #include "FileTreeView.h"
 #include "TreeMapView.h"
 #include "FileTopControl.h"
+#include "FileDupeControl.h"
 #include "FileSearchControl.h"
 #include "FileWatcherControl.h"
 #include "FilePermsControl.h"
@@ -156,7 +157,8 @@ BOOL CWinDirStatModel::StartScan(const std::wstring& pathSpec)
     return true;
 }
 
-BOOL CWinDirStatModel::OpenLoadedScan(CItem* loadedRoot)
+BOOL CWinDirStatModel::OpenLoadedScan(CItem* loadedRoot,
+    const std::vector<std::pair<CItem*, std::wstring>>& dupeHashes)
 {
     CMainFrame::Get()->ExpandFileTabbedView();
 
@@ -188,6 +190,14 @@ BOOL CWinDirStatModel::OpenLoadedScan(CItem* loadedRoot)
     }
 
     NotifyPanes(MODEL_CHANGE_NEW_ROOT);
+
+    // Rebuild the Duplicates view from cached hashes stored in the saved scan,
+    // so it is restored without re-reading or re-hashing any files.
+    if (!dupeHashes.empty() && CFileDupeControl::Get() != nullptr)
+    {
+        CFileDupeControl::Get()->RebuildFromSavedHashes(dupeHashes);
+    }
+
     StartScanningEngine({});
     return true;
 }

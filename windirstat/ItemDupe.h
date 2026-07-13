@@ -46,6 +46,10 @@ public:
     CItemDupe& operator=(CItemDupe&&) = delete;
     CItemDupe() = default;
     CItemDupe(const std::vector<BYTE> & hash);
+    // Reconstruct a hash-group node directly from its display hash string.
+    // Used when rebuilding the Duplicates view from a loaded scan (the raw
+    // hash bytes are not persisted, only the hex string).
+    explicit CItemDupe(std::wstring hashString);
     CItemDupe(CItem* item);
     ~CItemDupe() override;
 

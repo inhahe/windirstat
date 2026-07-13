@@ -331,12 +331,13 @@ void CWinDirStatModel::OnLoadResults()
     if (dlg.DoModal() != IDOK) return;
 
     CItem* newroot = nullptr;
+    std::vector<std::pair<CItem*, std::wstring>> dupeHashes;
     CProgressDlg(0, CProgressDlg::Flags::NoCancel, AfxGetMainWnd(), [&](CProgressDlg*)
     {
-        newroot = LoadResults(dlg.GetPathName().GetString());
+        newroot = LoadResults(dlg.GetPathName().GetString(), &dupeHashes);
     }).DoModal();
 
-    if (newroot != nullptr) Get()->OpenLoadedScan(newroot);
+    if (newroot != nullptr) Get()->OpenLoadedScan(newroot, dupeHashes);
 }
 
 void CWinDirStatModel::OnEditCopy()
@@ -954,8 +955,19 @@ void CWinDirStatModel::OnScanStop()
 
 void CWinDirStatModel::StopScanningEngine(StopReason stopReason)
 {
+    // Signal cancellation up front (recording the stop reason) so worker threads
+    // break out of long, otherwise-uninterruptible operations promptly — the MFT
+    // read in FinderNtfs::LoadRoot and enumerating a huge directory — instead of
+    // running to completion. Without this, closing the app mid-scan hangs because
+    // SuspendExecution below waits for AllThreadsIdling() while a worker is still
+    // deep inside one of those operations with no cancellation checkpoint. Setting
+    // the stop reason here keeps WaitForCompletion in the scan wrapper returning the
+    // correct reason even though CancelExecution runs afterward.
+    for (auto& queue : m_queues | std::views::values)
+        queue.SignalCancellation(stopReason);
+
     // Interrupt blocking I/O (e.g. ReadFile on large files) in worker threads
-    // so they reach WaitIfSuspended promptly. Without this, SuspendExecution
+    // so they reach a cancellation checkpoint promptly. Without this, SuspendExecution
     // hangs indefinitely waiting for AllThreadsIdling() while a thread reads.
     for (auto& queue : m_queues | std::views::values)
         queue.CancelThreadIo();

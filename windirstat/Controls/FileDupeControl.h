@@ -29,6 +29,10 @@ public:
     static CFileDupeControl* Get() { return m_singleton; }
     CItemDupe* GetRootItem() const { return m_rootItem; }
     void ProcessDuplicate(CItem* item, BlockingQueue<CItem*>* queue);
+    // Rebuild the duplicate tree from cached (item, hash-hex) pairs restored from a
+    // saved scan, avoiding any disk reads / re-hashing. Files sharing the same hash
+    // (2+ of them) are grouped exactly as a live duplicate scan would present them.
+    void RebuildFromSavedHashes(const std::vector<std::pair<CItem*, std::wstring>>& itemHashes);
     void RemoveItem(CItem* item);
     void SortItems() override;
     void AfterDeleteAllItems() override;

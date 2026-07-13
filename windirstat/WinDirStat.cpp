@@ -425,9 +425,8 @@ BOOL CDirStatApp::InitInstance()
     }
 
     CWinDirStatModel::Get()->ResetScan();
-    CMainFrame::Get()->InitialShowWindow();
     CMainFrame::Get()->RebuildToolBar();
-    m_pMainWnd->ShowWindow(m_nCmdShow);
+    CMainFrame::Get()->InitialShowWindow(m_nCmdShow);
     m_pMainWnd->Invalidate();
     m_pMainWnd->UpdateWindow();
 
@@ -469,9 +468,10 @@ BOOL CDirStatApp::InitInstance()
     // Load results if specified via command line
     if (!m_loadFromPath.empty())
     {
-        if (CItem* newroot = LoadResults(m_loadFromPath); newroot != nullptr)
+        std::vector<std::pair<CItem*, std::wstring>> dupeHashes;
+        if (CItem* newroot = LoadResults(m_loadFromPath, &dupeHashes); newroot != nullptr)
         {
-            CWinDirStatModel::Get()->OpenLoadedScan(newroot);
+            CWinDirStatModel::Get()->OpenLoadedScan(newroot, dupeHashes);
         }
         return TRUE;
     }

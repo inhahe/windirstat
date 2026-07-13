@@ -22,6 +22,9 @@
 #include "ItemPerm.h"
 
 bool SaveResults(const std::wstring& path, CItem* rootItem);
-CItem* LoadResults(const std::wstring& path);
+// On success, if dupeHashes is non-null it is filled with (item, hash-hex) pairs
+// for every file that carried a cached duplicate-detection hash in the saved scan,
+// so the Duplicates view can be rebuilt without re-hashing.
+CItem* LoadResults(const std::wstring& path, std::vector<std::pair<CItem*, std::wstring>>* dupeHashes = nullptr);
 bool SaveDuplicates(const std::wstring& path, const CItemDupe* rootDupe);
 bool SavePermissions(const std::wstring& path, const std::vector<const CItemPerm*>& items);

@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "CsvLoader.h"
+#include "FileDupeControl.h"
 
 static bool IsJsonPath(const std::wstring& path)
 {
@@ -131,6 +132,7 @@ enum : std::uint8_t
     FIELD_ATTRIBUTES_WDS,
     FIELD_INDEX,
     FIELD_OWNER,
+    FIELD_HASH,
     FIELD_COUNT
 };
 
@@ -149,7 +151,8 @@ static void ParseHeaderLine(const std::vector<std::wstring_view>& header)
         { Localization::Lookup(IDS_COL_LAST_CHANGE), FIELD_LAST_CHANGE },
         { (Localization::LookupNeutral(AFX_IDS_APP_TITLE) + L" " + Localization::Lookup(IDS_COL_ATTRIBUTES)), FIELD_ATTRIBUTES_WDS },
         { Localization::Lookup(IDS_COL_INDEX), FIELD_INDEX },
-        { Localization::Lookup(IDS_COL_OWNER), FIELD_OWNER }
+        { Localization::Lookup(IDS_COL_OWNER), FIELD_OWNER },
+        { Localization::Lookup(IDS_COL_HASH), FIELD_HASH }
     };
 
     for (const auto c : std::views::iota(0u, header.size()))
@@ -252,7 +255,7 @@ static CItem* BuildAndAttachItem(std::wstring& namePath, std::wstring_view wdsAt
     return newitem;
 }
 
-static CItem* LoadResultsCsv(std::ifstream& reader)
+static CItem* LoadResultsCsv(std::ifstream& reader, std::vector<std::pair<CItem*, std::wstring>>* dupeHashes)
 {
     CItem* newroot = nullptr;
     std::string linebuf;
@@ -302,10 +305,11 @@ static CItem* LoadResultsCsv(std::ifstream& reader)
             ParseHeaderLine(fields);
             headerProcessed = true;
 
-            // Validate all necessary fields are present
+            // Validate all necessary fields are present. Owner and hash are
+            // optional columns (older files may omit them), so don't require them.
             for (const auto i : std::views::iota(0u, orderMap.size()))
             {
-                if (i == FIELD_OWNER) continue;
+                if (i == FIELD_OWNER || i == FIELD_HASH) continue;
                 if (orderMap[i] == UCHAR_MAX)
                 {
                     delete newroot;
@@ -320,11 +324,19 @@ static CItem* LoadResultsCsv(std::ifstream& reader)
         if (fields.size() <= maxRequiredField) continue;
 
         std::wstring namePath(fields[orderMap[FIELD_NAME]]);
-        BuildAndAttachItem(namePath, fields[orderMap[FIELD_ATTRIBUTES_WDS]],
+        CItem* built = BuildAndAttachItem(namePath, fields[orderMap[FIELD_ATTRIBUTES_WDS]],
             fields[orderMap[FIELD_LAST_CHANGE]], fields[orderMap[FIELD_SIZE_PHYSICAL]],
             fields[orderMap[FIELD_SIZE_LOGICAL]], fields[orderMap[FIELD_INDEX]],
             fields[orderMap[FIELD_ATTRIBUTES]], fields[orderMap[FIELD_FILES]],
             fields[orderMap[FIELD_FOLDERS]], newroot, parentMap);
+
+        // Capture a cached duplicate-detection hash if the column is present
+        if (dupeHashes != nullptr && built != nullptr &&
+            orderMap[FIELD_HASH] != UCHAR_MAX && orderMap[FIELD_HASH] < fields.size())
+        {
+            if (std::wstring_view hashView = fields[orderMap[FIELD_HASH]]; !hashView.empty())
+                dupeHashes->emplace_back(built, std::wstring(hashView));
+        }
     }
 
     if (newroot != nullptr) COptions::TreeMapUseLogical ? newroot->SortItemsBySizeLogical() : newroot->SortItemsBySizePhysical();
@@ -336,7 +348,7 @@ static CItem* LoadResultsCsv(std::ifstream& reader)
 
 // ── JSON load ─────────────────────────────────────────────────────────────────
 
-static CItem* LoadResultsJson(std::ifstream& reader)
+static CItem* LoadResultsJson(std::ifstream& reader, std::vector<std::pair<CItem*, std::wstring>>* dupeHashes)
 {
     // Build the same column-name → field-index mapping reused from CSV
     const std::unordered_map<std::wstring, DWORD> keyToField =
@@ -350,7 +362,8 @@ static CItem* LoadResultsJson(std::ifstream& reader)
         { Localization::Lookup(IDS_COL_LAST_CHANGE),   FIELD_LAST_CHANGE   },
         { Localization::LookupNeutral(AFX_IDS_APP_TITLE) + L" " + Localization::Lookup(IDS_COL_ATTRIBUTES), FIELD_ATTRIBUTES_WDS },
         { Localization::Lookup(IDS_COL_INDEX),         FIELD_INDEX         },
-        { Localization::Lookup(IDS_COL_OWNER),         FIELD_OWNER         }
+        { Localization::Lookup(IDS_COL_OWNER),         FIELD_OWNER         },
+        { Localization::Lookup(IDS_COL_HASH),          FIELD_HASH          }
     };
 
     CItem* newroot = nullptr;
@@ -379,11 +392,15 @@ static CItem* LoadResultsJson(std::ifstream& reader)
         // Validate minimum required fields
         if (fieldValues[FIELD_NAME].empty()) continue;
 
-        BuildAndAttachItem(fieldValues[FIELD_NAME], fieldValues[FIELD_ATTRIBUTES_WDS],
+        CItem* built = BuildAndAttachItem(fieldValues[FIELD_NAME], fieldValues[FIELD_ATTRIBUTES_WDS],
             fieldValues[FIELD_LAST_CHANGE], fieldValues[FIELD_SIZE_PHYSICAL],
             fieldValues[FIELD_SIZE_LOGICAL], fieldValues[FIELD_INDEX],
             fieldValues[FIELD_ATTRIBUTES], fieldValues[FIELD_FILES],
             fieldValues[FIELD_FOLDERS], newroot, parentMap);
+
+        // Capture a cached duplicate-detection hash if present
+        if (dupeHashes != nullptr && built != nullptr && !fieldValues[FIELD_HASH].empty())
+            dupeHashes->emplace_back(built, fieldValues[FIELD_HASH]);
     }
 
     if (newroot != nullptr) COptions::TreeMapUseLogical ? newroot->SortItemsBySizeLogical() : newroot->SortItemsBySizePhysical();
@@ -393,7 +410,7 @@ static CItem* LoadResultsJson(std::ifstream& reader)
     return newroot;
 }
 
-CItem* LoadResults(const std::wstring& path)
+CItem* LoadResults(const std::wstring& path, std::vector<std::pair<CItem*, std::wstring>>* dupeHashes)
 {
     std::ifstream reader(path);
     std::vector<char> buffer(1ul * wds::Mi);
@@ -407,7 +424,7 @@ CItem* LoadResults(const std::wstring& path)
         reader.seekg(0);
     }
 
-    return IsJsonPath(path) ? LoadResultsJson(reader) : LoadResultsCsv(reader);
+    return IsJsonPath(path) ? LoadResultsJson(reader, dupeHashes) : LoadResultsCsv(reader, dupeHashes);
 }
 
 // Walk the item tree breadth-first and return a flat ordered list
@@ -463,7 +480,8 @@ static std::unordered_map<const CItem*, LONGLONG>
 }
 
 static bool SaveResultsCsv(std::ofstream& outf, const std::vector<const CItem*>& items,
-    const std::vector<std::wstring>& cols, const std::unordered_map<const CItem*, LONGLONG>& adjustedSizes)
+    const std::vector<std::wstring>& cols, const std::unordered_map<const CItem*, LONGLONG>& adjustedSizes,
+    const std::unordered_map<const CItem*, std::wstring>& itemHashes)
 {
     // Header
     for (size_t i = 0; i < cols.size(); ++i)
@@ -487,6 +505,8 @@ static bool SaveResultsCsv(std::ofstream& outf, const std::vector<const CItem*>&
             static_cast<std::uint32_t>(itemType),
             item->GetIndex());
         if (COptions::ShowColumnOwner) outf << "," << QuoteAndConvert(item->GetOwner(true));
+        const auto hIt = itemHashes.find(item);
+        outf << "," << QuoteAndConvert(hIt != itemHashes.end() ? hIt->second : std::wstring{});
     }
     outf.flush();
     return outf.good();
@@ -497,12 +517,14 @@ static bool SaveResultsCsv(std::ofstream& outf, const std::vector<const CItem*>&
 static bool SaveResultsJson(std::ofstream& outf,
     const std::vector<const CItem*>& items,
     const std::vector<std::wstring>& cols,
-    const std::unordered_map<const CItem*, LONGLONG>& adjustedSizes)
+    const std::unordered_map<const CItem*, LONGLONG>& adjustedSizes,
+    const std::unordered_map<const CItem*, std::wstring>& itemHashes)
 {
     // Pre-quote all column key strings once (cols are in FIELD_* index order)
     std::array<std::string, FIELD_COUNT> jk;
     for (size_t i = 0; i < cols.size(); ++i) jk[i] = JsonQuoteW(cols[i]);
     const std::string jkOwner = COptions::ShowColumnOwner ? JsonQuoteW(cols[FIELD_OWNER]) : std::string{};
+    const std::string jkHash  = JsonQuoteW(Localization::Lookup(IDS_COL_HASH));
 
     outf << "[\r\n";
     bool firstItem = true;
@@ -530,6 +552,8 @@ static bool SaveResultsJson(std::ofstream& outf,
             jk[FIELD_INDEX], item->GetIndex());
         if (COptions::ShowColumnOwner)
             outf << ",\r\n  " << jkOwner << ": " << JsonQuoteW(item->GetOwner(true));
+        const auto hIt = itemHashes.find(item);
+        outf << ",\r\n  " << jkHash << ": " << JsonQuoteW(hIt != itemHashes.end() ? hIt->second : std::wstring{});
         outf << "\r\n}";
     }
     outf << "\r\n]\r\n";
@@ -555,13 +579,28 @@ bool SaveResults(const std::wstring& path, CItem* rootItem)
         Localization::Lookup(IDS_COL_INDEX)
     };
     if (COptions::ShowColumnOwner) cols.push_back(Localization::Lookup(IDS_COL_OWNER));
+    cols.push_back(Localization::Lookup(IDS_COL_HASH));
+
+    // Cache each duplicate file's detection hash so the Duplicates view can be
+    // rebuilt on load without re-reading and re-hashing files from disk.
+    std::unordered_map<const CItem*, std::wstring> itemHashes;
+    if (auto* dupeControl = CFileDupeControl::Get(); dupeControl != nullptr)
+    {
+        if (const CItemDupe* dupeRoot = dupeControl->GetRootItem(); dupeRoot != nullptr)
+        {
+            for (const CItemDupe* group : dupeRoot->GetChildren())
+                for (const CItemDupe* child : group->GetChildren())
+                    if (CItem* linked = const_cast<CItemDupe*>(child)->GetLinkedItem(); linked != nullptr)
+                        itemHashes[linked] = group->GetHash();
+        }
+    }
 
     std::ofstream outf(path, std::ios::binary);
     if (!outf.is_open()) return false;
 
     return IsJsonPath(path)
-        ? SaveResultsJson(outf, items, cols, adjustedSizes)
-        : SaveResultsCsv (outf, items, cols, adjustedSizes);
+        ? SaveResultsJson(outf, items, cols, adjustedSizes, itemHashes)
+        : SaveResultsCsv (outf, items, cols, adjustedSizes, itemHashes);
 }
 
 static std::vector<std::tuple<std::wstring, const CItem*>>

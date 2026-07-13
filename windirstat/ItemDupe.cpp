@@ -24,6 +24,8 @@ CItemDupe::CItemDupe(const std::vector<BYTE>& hash) :
 {
 }
 
+CItemDupe::CItemDupe(std::wstring hashString) : m_hashString(std::move(hashString)) {}
+
 CItemDupe::CItemDupe(CItem* item) : m_item(item) {}
 
 CItemDupe::~CItemDupe()

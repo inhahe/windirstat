@@ -91,7 +91,8 @@ public:
     void ClearScanState();
     BOOL ResetScan();
     BOOL StartScan(const std::wstring& pathSpec);
-    BOOL OpenLoadedScan(CItem* loadedRoot);
+    BOOL OpenLoadedScan(CItem* loadedRoot,
+        const std::vector<std::pair<CItem*, std::wstring>>& dupeHashes = {});
     void SetScanPathSpec(const std::wstring& pathSpec);
     const std::wstring& GetScanPathSpec() const { return m_scanPathSpec; }
     const std::wstring& GetScanTitle() const { return m_scanTitle; }

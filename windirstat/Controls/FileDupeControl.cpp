@@ -156,6 +156,69 @@ void CFileDupeControl::ProcessDuplicate(CItem* item, BlockingQueue<CItem*>* queu
     }
 }
 
+void CFileDupeControl::RebuildFromSavedHashes(const std::vector<std::pair<CItem*, std::wstring>>& itemHashes)
+{
+    if (m_rootItem == nullptr) return;
+
+    // Group the restored items by their cached hash string, preserving first-seen order
+    std::map<std::wstring, std::vector<CItem*>> groups;
+    for (const auto& [item, hash] : itemHashes)
+    {
+        if (item == nullptr || hash.empty()) continue;
+        groups[hash].push_back(item);
+    }
+
+    // Convert a lowercase hex string back into raw bytes for the node tracker key
+    const auto hexToBytes = [](const std::wstring& hex) -> std::vector<BYTE>
+    {
+        std::vector<BYTE> bytes;
+        if (hex.size() % 2 != 0) return bytes;
+        bytes.reserve(hex.size() / 2);
+        for (size_t i = 0; i + 1 < hex.size(); i += 2)
+        {
+            const auto nibble = [](wchar_t c) -> int
+            {
+                if (c >= L'0' && c <= L'9') return c - L'0';
+                if (c >= L'a' && c <= L'f') return c - L'a' + 10;
+                if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+                return -1;
+            };
+            const int hi = nibble(hex[i]);
+            const int lo = nibble(hex[i + 1]);
+            if (hi < 0 || lo < 0) { bytes.clear(); break; }
+            bytes.push_back(static_cast<BYTE>(hi << 4 | lo));
+        }
+        return bytes;
+    };
+
+    for (const auto& [hash, items] : groups)
+    {
+        // A single file with a given hash is not a duplicate
+        if (items.size() < 2) continue;
+
+        auto* dupeParent = new CItemDupe(hash);
+        m_pendingListAdds.push(std::make_pair(nullptr, dupeParent));
+        if (auto bytes = hexToBytes(hash); !bytes.empty())
+            m_nodeTracker.emplace(std::move(bytes), dupeParent);
+
+        auto& childSet = m_childTracker[dupeParent];
+        for (auto* item : items)
+        {
+            const auto dupeChild = new CItemDupe(item);
+            m_pendingListAdds.push(std::make_pair(dupeParent, dupeChild));
+            childSet.emplace(item);
+
+            // Mirror the state a live scan would leave behind so later edits
+            // (e.g. deleting a file) clean the visual tree correctly.
+            item->SetHashType(ITHASH_LARGE);
+            m_sizeTracker[item->GetSizeLogical()].push_back(item);
+        }
+    }
+
+    // Flush the pending additions into the visual tree
+    SortItems();
+}
+
 void CFileDupeControl::SortItems()
 {
     ASSERT(AfxGetThread() != nullptr);
