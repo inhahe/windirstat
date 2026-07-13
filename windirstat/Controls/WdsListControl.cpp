@@ -677,6 +677,13 @@ int CWdsListControl::GetSubItemWidth(CWdsListItem* item, const int subitem, CDC*
         return 0;
     }
 
+    // Right-aligned "stat" columns (sizes, counts, percentages, timestamps) are
+    // rendered in the fixed-width stat font, which is wider than the proportional
+    // list font for the same text. Measure with that same font so the computed
+    // width matches what is drawn; otherwise the text (e.g. the full date/time in
+    // the Last Change column) gets clipped.
+    CSelectObject sofont(pDC, IsSubItemRightAligned(subitem) ? GetStatFont() : GetFont());
+
     SIZE size;
     GetTextExtentPoint32W(pDC->m_hDC, s.c_str(), static_cast<int>(s.size()), &size);
     return TEXT_X_MARGIN + size.cx;
@@ -744,6 +751,20 @@ int CWdsListControl::ColumnToSubItem(const int col) const
     LVCOLUMN column_info{ .mask = LVCF_SUBITEM };
     GetColumn(col, &column_info);
     return column_info.iSubItem;
+}
+
+bool CWdsListControl::IsSubItemRightAligned(const int subitem) const
+{
+    // Find the (possibly reordered) column that maps to this sub-item and report
+    // whether it carries the right-align format flag, mirroring the DrawItem logic
+    // that picks the stat font for right-aligned columns.
+    for (const int col : std::views::iota(0, m_columnCount))
+    {
+        LVCOLUMN colInfo{ .mask = LVCF_SUBITEM | LVCF_FMT };
+        GetColumn(col, &colInfo);
+        if (colInfo.iSubItem == subitem) return (colInfo.fmt & LVCFMT_RIGHT) != 0;
+    }
+    return false;
 }
 
 void CWdsListControl::SetSorting(const SSorting& sorting)

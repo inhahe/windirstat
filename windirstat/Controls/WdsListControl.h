@@ -176,6 +176,10 @@ public:
     // Fixed-width font used for the right-aligned "stat" columns (sizes, counts,
     // percentages, timestamps) so their digits line up in neat columns.
     CFont* GetStatFont() const;
+    // True when the column mapped to this sub-item is right-aligned, i.e. a "stat"
+    // column drawn in the fixed-width stat font. Used so width measurement matches
+    // the font actually used to render the cell.
+    bool IsSubItemRightAligned(int subitem) const;
 
 protected:
     void InitializeColors();
