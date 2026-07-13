@@ -45,7 +45,7 @@ void CFileTreeView::CreateColumns(const bool all)
     if (COptions::ShowColumnItems) InsertCol(IDS_COL_ITEMS, LVCFMT_RIGHT, 90, COL_ITEMS);
     if (COptions::ShowColumnFiles) InsertCol(IDS_COL_FILES, LVCFMT_RIGHT, 90, COL_FILES);
     if (COptions::ShowColumnFolders) InsertCol(IDS_COL_FOLDERS, LVCFMT_RIGHT, 90, COL_FOLDERS);
-    if (COptions::ShowColumnLastChange) InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_LEFT, 120, COL_LAST_CHANGE);
+    if (COptions::ShowColumnLastChange) InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_RIGHT, 120, COL_LAST_CHANGE);
     if (COptions::ShowColumnAttributes) InsertCol(IDS_COL_ATTRIBUTES, LVCFMT_LEFT, 90, COL_ATTRIBUTES);
     if (COptions::ShowColumnOwner) InsertCol(IDS_COL_OWNER, LVCFMT_LEFT, 200, COL_OWNER);
 
@@ -95,7 +95,7 @@ int CFileWatcherView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
 
     // Columns should be in enumeration order so initial sort will work
     InsertCol(IDS_COL_NAME, LVCFMT_LEFT, 500, COL_ITEMWATCH_NAME);
-    InsertCol(IDS_COL_TIME, LVCFMT_LEFT, 150, COL_ITEMWATCH_TIME);
+    InsertCol(IDS_COL_TIME, LVCFMT_RIGHT, 150, COL_ITEMWATCH_TIME);
     InsertCol(IDS_COL_OPERATION, LVCFMT_LEFT, 100, COL_ITEMWATCH_ACTION);
     InsertCol(IDS_COL_SIZE_LOGICAL, LVCFMT_RIGHT, 90, COL_ITEMWATCH_SIZE_LOGICAL);
     m_control.SetSorting(COL_ITEMWATCH_TIME, true);
@@ -155,7 +155,7 @@ int CFileTopView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     InsertCol(IDS_COL_NAME, LVCFMT_LEFT, 500, COL_ITEMTOP_NAME);
     InsertCol(IDS_COL_SIZE_PHYSICAL, LVCFMT_RIGHT, 90, COL_ITEMTOP_SIZE_PHYSICAL);
     InsertCol(IDS_COL_SIZE_LOGICAL, LVCFMT_RIGHT, 90, COL_ITEMTOP_SIZE_LOGICAL);
-    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_LEFT, 120, COL_ITEMTOP_LAST_CHANGE);
+    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_RIGHT, 120, COL_ITEMTOP_LAST_CHANGE);
     m_control.SetSorting(COL_ITEMTOP_SIZE_PHYSICAL, false);
 
     m_control.OnColumnsInserted();
@@ -185,7 +185,7 @@ int CFileDupeView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     InsertCol(IDS_COL_ITEMS, LVCFMT_RIGHT, 70, COL_ITEMDUP_ITEMS);
     InsertCol(IDS_COL_SIZE_PHYSICAL, LVCFMT_RIGHT, 80, COL_ITEMDUP_SIZE_PHYSICAL);
     InsertCol(IDS_COL_SIZE_LOGICAL, LVCFMT_RIGHT, 80, COL_ITEMDUP_SIZE_LOGICAL);
-    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_LEFT, 120, COL_ITEMDUP_LAST_CHANGE);
+    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_RIGHT, 120, COL_ITEMDUP_LAST_CHANGE);
     m_control.SetSorting(COL_ITEMDUP_SIZE_PHYSICAL, false);
 
     m_control.OnColumnsInserted();
@@ -213,7 +213,7 @@ int CFileSearchView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     InsertCol(IDS_COL_NAME, LVCFMT_LEFT, 500, COL_ITEMSEARCH_NAME);
     InsertCol(IDS_COL_SIZE_PHYSICAL, LVCFMT_RIGHT, 90, COL_ITEMSEARCH_SIZE_PHYSICAL);
     InsertCol(IDS_COL_SIZE_LOGICAL, LVCFMT_RIGHT, 90, COL_ITEMSEARCH_SIZE_LOGICAL);
-    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_LEFT, 120, COL_ITEMSEARCH_LAST_CHANGE);
+    InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_RIGHT, 120, COL_ITEMSEARCH_LAST_CHANGE);
     m_control.SetSorting(COL_ITEMSEARCH_SIZE_LOGICAL, false);
 
     m_control.OnColumnsInserted();
