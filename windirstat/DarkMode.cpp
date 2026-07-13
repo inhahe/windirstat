@@ -472,3 +472,187 @@ void CDarkModeVisualManager::OnUpdateSystemColors()
     CMFCVisualManagerWindows::OnUpdateSystemColors();
     DarkMode::SetupGlobalColors();
 }
+
+// Flat modern dark palette used by the ribbon overrides below. These values are
+// only consulted while CDarkModeVisualManager is the active visual manager, which
+// happens exclusively in dark mode, so fixed dark values are appropriate here.
+namespace
+{
+    constexpr COLORREF kRibbonHover        = RGB(62, 62, 64);   // button / tab hover fill
+    constexpr COLORREF kRibbonPressed      = RGB(38, 63, 92);   // pressed / dropped-down fill
+    constexpr COLORREF kRibbonChecked      = RGB(38, 63, 92);   // toggled-on fill
+    constexpr COLORREF kRibbonCheckedHover = RGB(48, 78, 110);  // toggled-on + hover fill
+    constexpr COLORREF kRibbonBorder       = RGB(90, 90, 94);   // subtle hover border
+    constexpr COLORREF kRibbonSeparator    = RGB(64, 64, 66);   // panel / frame separators
+}
+
+COLORREF CDarkModeVisualManager::OnDrawRibbonTabsFrame(CDC* pDC, CMFCRibbonBar* /*pWndRibbonBar*/, CRect rectTab)
+{
+    ASSERT_VALID(pDC);
+
+    // A single flat separator line under the tab strip - no raised 3D edge.
+    pDC->FillSolidRect(rectTab.left, rectTab.top, rectTab.Width(), 1, kRibbonSeparator);
+    return static_cast<COLORREF>(-1);
+}
+
+void CDarkModeVisualManager::OnDrawRibbonCategory(CDC* pDC, CMFCRibbonCategory* pCategory, CRect rectCategory)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pCategory);
+
+    // Flat body fill, slightly lighter than the tab strip, with no border or shadow.
+    pDC->FillSolidRect(rectCategory, DarkMode::WdsSysColor(COLOR_BTNFACE));
+}
+
+COLORREF CDarkModeVisualManager::OnDrawRibbonCategoryTab(CDC* pDC, CMFCRibbonTab* pTab, BOOL bIsActive)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pTab);
+
+    CMFCRibbonCategory* pCategory = pTab->GetParentCategory();
+    ASSERT_VALID(pCategory);
+    CMFCRibbonBar* pBar = pCategory->GetParentRibbonBar();
+    ASSERT_VALID(pBar);
+
+    bIsActive = bIsActive && ((pBar->GetHideFlags() & AFX_RIBBONBAR_HIDE_ELEMENTS) == 0 || pTab->GetDroppedDown() != nullptr);
+
+    const BOOL bIsFocused = pTab->IsFocused() && (pBar->GetHideFlags() & AFX_RIBBONBAR_HIDE_ELEMENTS);
+    const bool bIsHighlighted = (pTab->IsHighlighted() || bIsFocused) && !pTab->IsDroppedDown();
+
+    const CRect rectTab = pTab->GetRect();
+
+    if (bIsActive)
+    {
+        // Flat body-coloured tab with a bright accent underline.
+        pDC->FillSolidRect(rectTab, DarkMode::WdsSysColor(COLOR_BTNFACE));
+        pDC->FillSolidRect(rectTab.left, rectTab.bottom - 2, rectTab.Width(), 2, DarkMode::WdsSysColor(COLOR_HIGHLIGHT));
+    }
+    else if (bIsHighlighted)
+    {
+        pDC->FillSolidRect(rectTab, kRibbonHover);
+    }
+
+    return DarkMode::WdsSysColor(COLOR_BTNTEXT);
+}
+
+COLORREF CDarkModeVisualManager::OnDrawRibbonPanel(CDC* pDC, CMFCRibbonPanel* pPanel, CRect rectPanel, CRect /*rectCaption*/)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pPanel);
+
+    COLORREF clrText = DarkMode::WdsSysColor(COLOR_BTNTEXT);
+
+    if (pPanel->IsCollapsed() && pPanel->GetDefaultButton().IsFocused())
+    {
+        pDC->FillSolidRect(rectPanel, DarkMode::WdsSysColor(COLOR_HIGHLIGHT));
+        clrText = DarkMode::WdsSysColor(COLOR_HIGHLIGHTTEXT);
+    }
+    else if (pPanel->IsHighlighted())
+    {
+        pDC->FillSolidRect(rectPanel, kRibbonHover);
+    }
+
+    // Thin vertical separator on the right edge instead of a raised 3D box.
+    pDC->FillSolidRect(rectPanel.right - 1, rectPanel.top + 2, 1, rectPanel.Height() - 4, kRibbonSeparator);
+
+    return clrText;
+}
+
+void CDarkModeVisualManager::OnDrawRibbonPanelCaption(CDC* pDC, CMFCRibbonPanel* pPanel, CRect rectCaption)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pPanel);
+
+    // Flat dark caption. The stock manager uses light-mode caption colors here,
+    // which paints dark text on a light bar - unreadable in dark mode.
+    pDC->FillSolidRect(rectCaption, DarkMode::WdsSysColor(COLOR_BTNFACE));
+
+    CString str = pPanel->GetName();
+
+    if (pPanel->GetLaunchButton().GetID() > 0)
+    {
+        rectCaption.right = pPanel->GetLaunchButton().GetRect().left;
+    }
+
+    const COLORREF clrTextOld = pDC->SetTextColor(DarkMode::WdsSysColor(COLOR_GRAYTEXT));
+    const int bkModeOld = pDC->SetBkMode(TRANSPARENT);
+
+    rectCaption.DeflateRect(3, 1);
+    pDC->DrawText(str, rectCaption, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+
+    pDC->SetBkMode(bkModeOld);
+    pDC->SetTextColor(clrTextOld);
+}
+
+COLORREF CDarkModeVisualManager::OnFillRibbonButton(CDC* pDC, CMFCRibbonButton* pButton)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pButton);
+
+    // Leave in-place edit controls to the base implementation.
+    if (pButton->IsKindOf(RUNTIME_CLASS(CMFCRibbonEdit)))
+    {
+        return CMFCVisualManagerWindows::OnFillRibbonButton(pDC, pButton);
+    }
+
+    const bool highlighted = pButton->IsHighlighted() != FALSE;
+
+    // Menu (dropdown / backstage) items use the system accent as a selection bar.
+    if (pButton->IsMenuMode() && !pButton->IsGalleryIcon() && highlighted)
+    {
+        pDC->FillSolidRect(pButton->GetRect(), DarkMode::WdsSysColor(COLOR_HIGHLIGHT));
+        return DarkMode::WdsSysColor(COLOR_HIGHLIGHTTEXT);
+    }
+
+    const bool pressed = pButton->IsPressed() || pButton->IsDroppedDown();
+    const bool checked = pButton->IsChecked() != FALSE;
+
+    COLORREF fill = CLR_NONE;
+    if (checked && highlighted) fill = kRibbonCheckedHover;
+    else if (checked)           fill = kRibbonChecked;
+    else if (pressed)           fill = kRibbonPressed;
+    else if (highlighted)       fill = kRibbonHover;
+
+    if (fill != CLR_NONE)
+    {
+        pDC->FillSolidRect(pButton->GetRect(), fill);
+    }
+
+    return static_cast<COLORREF>(-1);
+}
+
+void CDarkModeVisualManager::OnDrawRibbonButtonBorder(CDC* pDC, CMFCRibbonButton* pButton)
+{
+    ASSERT_VALID(pDC);
+    ASSERT_VALID(pButton);
+
+    if (pButton->IsKindOf(RUNTIME_CLASS(CMFCRibbonEdit))) return;
+
+    // Menu-mode checked buttons render as a flat fill without any border.
+    if (pButton->IsMenuMode() && pButton->IsChecked() && !pButton->IsHighlighted()) return;
+
+    const bool active = pButton->IsHighlighted() || pButton->IsChecked() ||
+                        pButton->IsDroppedDown() || pButton->IsFocused();
+    if (!active) return;
+
+    const CRect rect = pButton->GetRect();
+    const bool pressed = pButton->IsPressed() || pButton->IsChecked() || pButton->IsDroppedDown();
+    const COLORREF border = pressed ? DarkMode::WdsSysColor(COLOR_HIGHLIGHT) : kRibbonBorder;
+
+    // Flat single-width border (same color both edges - no raised bevel).
+    pDC->Draw3dRect(rect, border, border);
+
+    // Flat divider between the command and menu halves of a split button.
+    const CRect rectMenu = pButton->GetMenuRect();
+    if (!rectMenu.IsRectEmpty())
+    {
+        if (pButton->IsMenuOnBottom())
+        {
+            pDC->FillSolidRect(rectMenu.left, rectMenu.top, rectMenu.Width(), 1, border);
+        }
+        else
+        {
+            pDC->FillSolidRect(rectMenu.left, rectMenu.top, 1, rectMenu.Height(), border);
+        }
+    }
+}

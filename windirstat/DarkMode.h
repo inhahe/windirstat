@@ -100,4 +100,17 @@ protected:
     void OnDrawStatusBarPaneBorder(CDC* pDC, CMFCStatusBar* pBar, CRect rectPane, UINT uiID, UINT nStyle) override;
     void OnFillSplitterBackground(CDC* pDC, CSplitterWndEx* pSplitterWnd, CRect rect) override;
     void OnUpdateSystemColors() override;
+
+    // Flat, modern ribbon rendering. The stock CMFCVisualManagerWindows draws the
+    // ribbon with raised 3D borders, polygon "raised" tabs, dithered checked fills
+    // and light-mode caption colors - a dated, high-relief look. These overrides
+    // replace all of that with flat fills, an accent underline on the active tab,
+    // thin separators and dark panel captions.
+    COLORREF OnDrawRibbonTabsFrame(CDC* pDC, CMFCRibbonBar* pWndRibbonBar, CRect rectTab) override;
+    void OnDrawRibbonCategory(CDC* pDC, CMFCRibbonCategory* pCategory, CRect rectCategory) override;
+    COLORREF OnDrawRibbonCategoryTab(CDC* pDC, CMFCRibbonTab* pTab, BOOL bIsActive) override;
+    COLORREF OnDrawRibbonPanel(CDC* pDC, CMFCRibbonPanel* pPanel, CRect rectPanel, CRect rectCaption) override;
+    void OnDrawRibbonPanelCaption(CDC* pDC, CMFCRibbonPanel* pPanel, CRect rectCaption) override;
+    COLORREF OnFillRibbonButton(CDC* pDC, CMFCRibbonButton* pButton) override;
+    void OnDrawRibbonButtonBorder(CDC* pDC, CMFCRibbonButton* pButton) override;
 };
