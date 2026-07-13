@@ -885,7 +885,12 @@ BOOL CMainFrame::LoadFrame(const UINT nIDResource, const DWORD dwDefaultStyle, C
         return FALSE;
     }
 
-    Localization::UpdateMenu(*GetMenu());
+    // With the ribbon enabled the classic menu bar is removed (SetMenu(nullptr)),
+    // so only localize the menu when one actually exists.
+    if (CMenu* menu = GetMenu(); menu != nullptr && menu->GetSafeHmenu() != nullptr)
+    {
+        Localization::UpdateMenu(*menu);
+    }
     Localization::UpdateDialogs(*this);
     SetTitle(wds::strWinDirStat);
 

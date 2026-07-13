@@ -108,7 +108,8 @@ BEGIN
     "#pragma code_page(65001)\r\n"
     "#include ""res\\windirstat.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
     "#include ""afxres.rc""         // Standard components\r\n"
-    "#include ""afxribbon.rc""        // MFC ribbon and control bar resources \r\n"
+    "#include ""afxprint.rc""       // Print/print-preview resources (needed by the ribbon's print-preview category)\r\n"
+    "#include ""afxribbon.rc""        // MFC ribbon and control bar resources\r\n"
     "#endif\r\n"
     "\0"
 END
@@ -970,7 +971,8 @@ LANGUAGE 9, 1
 #pragma code_page(65001)
 #include "res\windirstat.rc2"  // non-Microsoft Visual C++ edited resources
 #include "afxres.rc"         // Standard components
-#include "afxribbon.rc"        // MFC ribbon and control bar resources 
+#include "afxprint.rc"       // Print/print-preview resources (needed by the ribbon's print-preview category)
+#include "afxribbon.rc"        // MFC ribbon and control bar resources
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
