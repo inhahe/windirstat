@@ -113,6 +113,25 @@ void DarkMode::SetupGlobalColors() noexcept
     data->clrBtnFace = WdsSysColor(COLOR_BTNFACE);
     data->clrBtnHilite = WdsSysColor(COLOR_BTNHILIGHT);
     data->clrBtnShadow = WdsSysColor(COLOR_BTNSHADOW);
+
+    // The ribbon (and toolbars) draw their labels with these "bar" colors. Without
+    // overriding them they keep the default light-mode values, so category-tab and
+    // button text is painted near-black on top of the dark bar fill and becomes
+    // effectively invisible. Point them at the dark-mode palette so all ribbon text
+    // is light-on-dark and readable.
+    data->clrBarText = WdsSysColor(COLOR_BTNTEXT);
+    data->clrBarWindow = WdsSysColor(COLOR_WINDOW);
+    data->clrBarHilite = WdsSysColor(COLOR_3DHIGHLIGHT);
+    data->clrBarShadow = WdsSysColor(COLOR_3DSHADOW);
+    data->clrBarDkShadow = WdsSysColor(COLOR_3DSHADOW);
+    data->clrBarLight = WdsSysColor(COLOR_3DLIGHT);
+    data->clrWindow = WdsSysColor(COLOR_WINDOW);
+    data->clrWindowText = WdsSysColor(COLOR_WINDOWTEXT);
+    data->clrGrayedText = WdsSysColor(COLOR_GRAYTEXT);
+    data->clrHilite = WdsSysColor(COLOR_HIGHLIGHT);
+    data->clrTextHilite = WdsSysColor(COLOR_HIGHLIGHTTEXT);
+    data->clrMenuText = WdsSysColor(COLOR_WINDOWTEXT);
+
     data->brBarFace.DeleteObject();
     data->brBarFace.CreateSolidBrush(data->clrBarFace);
     data->brBtnFace.DeleteObject();
