@@ -45,7 +45,7 @@ Setting<bool> COptions::UseSizeSuffixes(OptionsGeneral, L"UseSizeSuffixes", true
 Setting<bool> COptions::ListFullRowSelection(OptionsGeneral, L"ListFullRowSelection", true);
 Setting<bool> COptions::ListGrid(OptionsGeneral, L"ListGrid", false);
 Setting<bool> COptions::ListStripes(OptionsGeneral, L"ListStripes", false);
-Setting<bool> COptions::PacmanAnimation(OptionsGeneral, L"PacmanAnimation", true);
+Setting<bool> COptions::PacmanAnimation(OptionsGeneral, L"PacmanAnimation", false);
 Setting<bool> COptions::ScanForDuplicates(OptionsDupeTree, L"ScanForDuplicates", false);
 Setting<bool> COptions::SearchWholePhrase(OptionsSearch, L"SearchWholePhrase", false);
 Setting<bool> COptions::SearchRegex(OptionsSearch, L"SearchRegex", false);
@@ -69,7 +69,7 @@ Setting<bool> COptions::ShowStatusBar(OptionsGeneral, L"ShowStatusBar", true);
 Setting<bool> COptions::ShowTimeSpent(OptionsFileTree, L"ShowTimeSpent", true);
 Setting<bool> COptions::ShowToolBar(OptionsGeneral, L"ShowToolBar", true);
 Setting<bool> COptions::LargeToolBar(OptionsGeneral, L"LargeToolBar", false);
-Setting<bool> COptions::UseRibbon(OptionsGeneral, L"UseRibbon", false);
+Setting<bool> COptions::UseRibbon(OptionsGeneral, L"UseRibbon", true);
 Setting<bool> COptions::ShowTreeMap(OptionsTreeMap, L"ShowTreeMap", true);
 Setting<bool> COptions::UseFlameGraph(OptionsGeneral, L"UseFlameGraph", true);
 Setting<bool> COptions::ShowUnknown(OptionsGeneral, L"ShowUnknown", false);
