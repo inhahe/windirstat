@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "CsvLoader.h"
+#include "HashCache.h"
 #include "FileTreeView.h"
 #include "TreeMapView.h"
 #include "FileTopControl.h"
@@ -1301,6 +1302,10 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
                 if (visualInfo[item].isSelected) GetFocusControl()->SelectItem(item, false, true);
             }
         });
+
+        // Persist any newly computed duplicate hashes so a future scan can resume
+        // without re-reading file bytes, even across app restarts.
+        CHashCache::Get().Save();
 
         // Force heap cleanup after scan
         (void) _heapmin();

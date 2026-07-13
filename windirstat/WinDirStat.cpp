@@ -20,6 +20,7 @@
 #include "AboutDlg.h"
 #include "TreeMapView.h"
 #include "CsvLoader.h"
+#include "HashCache.h"
 
 CIconHandler* GetIconHandler()
 {
@@ -377,6 +378,10 @@ BOOL CDirStatApp::InitInstance()
 
     COptions::LoadAppSettings();
     LoadStdProfileSettings(0);
+
+    // Load the durable duplicate-hash cache so later duplicate scans can resume
+    // without re-reading file bytes. Depends on the loaded hash-algorithm setting.
+    CHashCache::Get().Load();
 
     // Silently restart elevated conditionally before any expensive initialization
     if (IsElevationAvailable() && COptions::AutoElevate && !COptions::ShowElevationPrompt) // only if user doesn't want to be prompted

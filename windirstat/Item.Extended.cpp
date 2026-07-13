@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "Item.h"
+#include "HashCache.h"
 
 static void CloseBCryptAlgHandle(BCRYPT_ALG_HANDLE h) noexcept { BCryptCloseAlgorithmProvider(h, 0); }
 static void FreeXxHashState(XXH3_state_t* state) noexcept { XXH3_freeState(state); }
@@ -950,6 +951,19 @@ std::vector<CItem*> CItem::FindItemsBySameIndex() const
 
 std::vector<BYTE> CItem::GetFileHash(ULONGLONG hashSizeLimit, BlockingQueue<CItem*>* queue)
 {
+    // Map the byte limit back to the tier the duplicate finder is asking for so a
+    // cached result can be returned without touching the disk. See CHashCache.
+    const CHashCache::HashTier tier =
+        hashSizeLimit <= 4ull * wds::Ki ? CHashCache::TierSmall :
+        hashSizeLimit <= wds::Mi ? CHashCache::TierMedium : CHashCache::TierLarge;
+    const std::wstring hashPath = GetPath();
+    const FILETIME hashLastWrite = GetLastChange();
+    const ULONGLONG hashLogicalSize = GetSizeLogical();
+    if (auto cached = CHashCache::Get().Lookup(hashPath, hashLogicalSize, hashLastWrite, tier); !cached.empty())
+    {
+        return cached;
+    }
+
     const HashAlgorithm hashAlgorithm = static_cast<HashAlgorithm>(COptions::FileHashAlgorithm.Obj());
     const auto& hashAlgorithmInfo = HashAlgorithms[hashAlgorithm];
     const bool useXxHash = hashAlgorithm == HASH_XXHASH;
@@ -1020,6 +1034,11 @@ std::vector<BYTE> CItem::GetFileHash(ULONGLONG hashSizeLimit, BlockingQueue<CIte
         std::min<ULONGLONG>(hashSizeLimit - totalBytesHashed, fileBuffer.size())),
         &iReadBytes, nullptr)) != 0 && iReadBytes > 0)
     {
+        // Abort promptly if the scan is being cancelled. Large-tier hashing reads the
+        // entire file (ULONGLONG_MAX limit), so without this checkpoint a multi-gigabyte
+        // hash would keep reading and delay shutdown by seconds.
+        if (queue->IsCancelled()) return {};
+
         UpwardDrivePacman();
 
         // Hash the data
@@ -1043,7 +1062,9 @@ std::vector<BYTE> CItem::GetFileHash(ULONGLONG hashSizeLimit, BlockingQueue<CIte
         if (iReadResult == 0) return {};
         XXH64_canonical_t canonical;
         XXH64_canonicalFromHash(&canonical, XXH3_64bits_digest(xxHasher));
-        return { canonical.digest, canonical.digest + sizeof(canonical.digest) };
+        std::vector<BYTE> result(canonical.digest, canonical.digest + sizeof(canonical.digest));
+        CHashCache::Get().Store(hashPath, hashLogicalSize, hashLastWrite, GetIndex(), tier, result);
+        return result;
     }
 
     // BCryptFinishHash must run even after a read failure
@@ -1059,7 +1080,9 @@ std::vector<BYTE> CItem::GetFileHash(ULONGLONG hashSizeLimit, BlockingQueue<CIte
     // is unnecessary for simple dupe checking. This is preferred to just using a simpler
     // hash alg since SHA512 is FIPS compliant on Windows and more performant than SHA256.
     const auto ReducedHashInBytes = std::min<size_t>(16, hashBuffer.size());
-    return { hashBuffer.begin(), hashBuffer.begin() + ReducedHashInBytes };
+    std::vector<BYTE> result(hashBuffer.begin(), hashBuffer.begin() + ReducedHashInBytes);
+    CHashCache::Get().Store(hashPath, hashLogicalSize, hashLastWrite, GetIndex(), tier, result);
+    return result;
 }
 
 // --- Private Helpers ---

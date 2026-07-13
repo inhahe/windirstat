@@ -224,6 +224,9 @@
     <ClInclude Include="CsvLoader.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
+    <ClInclude Include="HashCache.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
     <ClInclude Include="WinDirStatModel.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
@@ -431,6 +434,9 @@
       <Filter>Source Files\User Interface</Filter>
     </ClCompile>
     <ClCompile Include="CsvLoader.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="HashCache.cpp">
       <Filter>Source Files\Core</Filter>
     </ClCompile>
     <ClCompile Include="WinDirStatModel.cpp">
