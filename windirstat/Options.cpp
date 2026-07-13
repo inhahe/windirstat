@@ -41,7 +41,7 @@ Setting<bool> COptions::ExcludeHiddenFile(OptionsGeneral, L"ExcludeHiddenFile", 
 Setting<bool> COptions::ExcludeProtectedFile(OptionsGeneral, L"ExcludeProtectedFile", false);
 Setting<bool> COptions::FilteringUseRegex(OptionsGeneral, L"FilteringUseRegex", false);
 Setting<bool> COptions::FollowVolumeMountPoints(OptionsGeneral, L"FollowVolumeMountPoints", false);
-Setting<bool> COptions::UseSizeSuffixes(OptionsGeneral, L"UseSizeSuffixes", true);
+Setting<bool> COptions::UseSizeSuffixes(OptionsGeneral, L"UseSizeSuffixes", false);
 Setting<bool> COptions::ListFullRowSelection(OptionsGeneral, L"ListFullRowSelection", true);
 Setting<bool> COptions::ListGrid(OptionsGeneral, L"ListGrid", false);
 Setting<bool> COptions::ListStripes(OptionsGeneral, L"ListStripes", false);

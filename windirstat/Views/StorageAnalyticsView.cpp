@@ -751,7 +751,7 @@ void CStorageAnalyticsView::OnDraw(CDC* pDC)
             {
                 CSelectObject selectFont(&memDC, &fontCardVal);
                 CSetTextColor setTextColorCard(&memDC, fgText);
-                std::wstring sizeText = FormatSizeSuffixes(activeCards[i].size);
+                std::wstring sizeText = FormatBytes(activeCards[i].size);
                 memDC.TextOutW(rcCard.left + DpiRest(12, this), rcCard.top + DpiRest(30, this), sizeText.c_str());
             }
 

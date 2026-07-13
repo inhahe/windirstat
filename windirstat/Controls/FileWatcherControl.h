@@ -44,7 +44,7 @@ public:
         if (subitem == COL_ITEMWATCH_TIME) return FormatFileTime(m_item->GetLastChange(), true);
         if (subitem == COL_ITEMWATCH_NAME) return m_item->GetPath();
         if (subitem == COL_ITEMWATCH_ACTION) return m_action;
-        if (subitem == COL_ITEMWATCH_SIZE_LOGICAL) return FormatSizeSuffixes(m_item->GetSizeLogical());
+        if (subitem == COL_ITEMWATCH_SIZE_LOGICAL) return FormatBytes(m_item->GetSizeLogical());
         return {};
     }
 

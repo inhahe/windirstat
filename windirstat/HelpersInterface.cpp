@@ -104,12 +104,16 @@ wchar_t GetLocaleDecimalSeparator() noexcept
 
 std::wstring FormatBytes(const ULONGLONG n) noexcept
 {
+    // When the "size suffixes" option is enabled, abbreviate to KiB/MiB/GiB/TiB.
     if (COptions::UseSizeSuffixes)
     {
         return FormatSizeSuffixes(n);
     }
 
-    return FormatLongLongNormal(n) + L" " + GetSpec_Bytes();
+    // Otherwise (the default) show the exact number of bytes with digit grouping.
+    // The " bytes" unit suffix is intentionally omitted so columns show just the
+    // grouped number.
+    return FormatLongLongNormal(n);
 }
 
 std::wstring FormatSizeSuffixes(const ULONGLONG n) noexcept
