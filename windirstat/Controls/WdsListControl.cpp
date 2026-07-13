@@ -544,6 +544,11 @@ void CWdsListControl::DrawItem(LPDRAWITEMSTRUCT pdis)
             CSetTextColor tc(&dcMem, textColor);
             CSetBkColor backColorObj(&dcMem, backColorSub);
 
+            // Right-aligned columns are the numeric/date "stat" columns; draw them
+            // in a fixed-width font so digits and timestamps line up. Left-aligned
+            // columns (name, attributes, owner, …) keep the proportional font.
+            CSelectObject sostatfont(&dcMem, leftAlign ? GetFont() : GetStatFont());
+
             // Draw the (sub)item text
             DrawTextCache::Get().DrawTextCached(&dcMem, s, rcText, leftAlign);
         }
@@ -619,10 +624,32 @@ CFont* CWdsListControl::GetFont() const
     return CFont::FromHandle(m_cachedFont);
 }
 
+CFont* CWdsListControl::GetStatFont() const
+{
+    if (!m_statFontValid)
+    {
+        m_statFont.DeleteObject();
+
+        // Derive a fixed-pitch font from the current control font, keeping the same
+        // height/weight so rows still line up but digits become monospaced.
+        LOGFONT lf{};
+        if (CFont* base = GetFont(); base != nullptr && base->GetLogFont(&lf) != 0)
+        {
+            lf.lfPitchAndFamily = static_cast<BYTE>((lf.lfPitchAndFamily & 0xF0) | FIXED_PITCH);
+            wcscpy_s(lf.lfFaceName, L"Consolas");
+            m_statFont.CreateFontIndirect(&lf);
+        }
+        m_statFontValid = true;
+    }
+
+    return m_statFont.GetSafeHandle() != nullptr ? &m_statFont : GetFont();
+}
+
 LRESULT CWdsListControl::OnSetFont(WPARAM /*wParam*/, LPARAM /*lParam*/)
 {
     m_cachedFont = NULL;
     m_isFontCached = false;
+    m_statFontValid = false;
     return Default();
 }
 

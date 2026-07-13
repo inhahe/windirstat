@@ -173,6 +173,9 @@ public:
     void PostSelectionChanged();
     void DeselectAll();
     CFont* GetFont() const;
+    // Fixed-width font used for the right-aligned "stat" columns (sizes, counts,
+    // percentages, timestamps) so their digits line up in neat columns.
+    CFont* GetStatFont() const;
 
 protected:
     void InitializeColors();
@@ -204,6 +207,8 @@ protected:
     bool m_selectionChangePending = false;
     mutable HFONT m_cachedFont = NULL;
     mutable bool m_isFontCached = false;
+    mutable CFont m_statFont;             // fixed-width font matching the control font's size
+    mutable bool m_statFontValid = false;
 
     DECLARE_MESSAGE_MAP()
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
