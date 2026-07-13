@@ -15,6 +15,7 @@ Enhancements
 Bug Fixes
 - Corrected indeterminate progress dialog repainting
 - Corrected unreadable dark-on-dark ribbon text in dark mode
+- Corrected unreadable active settings tab (white-on-white) in dark mode
 - Corrected right-aligned columns (e.g. "Last Change") being too narrow to show their full contents
 - Fixed "Automatically elevate on startup" so it works on its own without also disabling the elevation prompt
 

@@ -74,8 +74,33 @@ void CMainFrame::CreateRibbon()
     // Additional glyph icons for commands that previously had none. All glyphs are
     // drawn from Segoe UI Symbol (the font used for every other generated icon) so
     // they render consistently in both light and dark mode.
-    const Painter loadIcon    = Icons::Char(L'⬇', Icons::NeutralRef());
-    const Painter saveIcon    = Icons::Char(L'⬆', Icons::NeutralRef());
+    //
+    // Save/Load use a hand-drawn "block arrow" instead of a font glyph so the arrow
+    // is short, fat, and shapely: a wide chevron head over a stubby shaft, with a
+    // round-join outline that softens the corners. Drawn in the shared 64x64 icon
+    // space and flipped vertically for the download (load) variant.
+    const auto blockArrow = [](Gdiplus::Graphics& g, const bool up)
+    {
+        using namespace Gdiplus;
+        const Color c = Icons::Neutral();
+        SolidBrush brush(c);
+        Pen pen(c, 7.0f);
+        pen.SetLineJoin(LineJoinRound);
+        PointF pts[] = {
+            { 32.0f, 14.0f }, // head apex
+            { 53.0f, 34.0f }, // head right corner
+            { 40.0f, 34.0f }, // right shoulder
+            { 40.0f, 50.0f }, // shaft bottom-right
+            { 24.0f, 50.0f }, // shaft bottom-left
+            { 24.0f, 34.0f }, // left shoulder
+            { 11.0f, 34.0f }  // head left corner
+        };
+        if (!up) for (auto& p : pts) p.Y = 64.0f - p.Y;
+        g.FillPolygon(&brush, pts, static_cast<INT>(std::size(pts)));
+        g.DrawPolygon(&pen, pts, static_cast<INT>(std::size(pts)));
+    };
+    const Painter loadIcon    = [blockArrow](Gdiplus::Graphics& g) { blockArrow(g, false); };
+    const Painter saveIcon    = [blockArrow](Gdiplus::Graphics& g) { blockArrow(g, true); };
     const Painter hashIcon    = Icons::Char(L'#', Icons::NeutralRef());
     const Painter treemapIcon = Icons::Char(L'▦', Icons::NeutralRef());
     const Painter aboutIcon   = Icons::Char(L'ℹ', Icons::NeutralRef());

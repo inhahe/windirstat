@@ -74,10 +74,14 @@ public:
         }
         helper.m_bScroll = FALSE;
 
-        // Dark mode tabs have a black background so set text to be white
+        // Dark mode: give the active tab an accent background with contrasting
+        // text. Without an explicit text color the active tab text defaults to
+        // the (light) window-text color, which is unreadable on a light active
+        // tab background - so set both the background and the foreground here.
         if (DarkMode::IsDarkModeActive())
         {
-            helper.SetActiveTabColor(DarkMode::WdsSysColor(COLOR_WINDOWTEXT));
+            helper.SetActiveTabColor(DarkMode::WdsSysColor(COLOR_HIGHLIGHT));
+            helper.SetActiveTabTextColor(DarkMode::WdsSysColor(COLOR_HIGHLIGHTTEXT));
             helper.SetTabBorderSize(1);
         }
     }
