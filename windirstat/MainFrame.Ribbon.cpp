@@ -42,6 +42,7 @@ namespace
         std::wstring text;
         Painter painter; // optional; when set a 16px + 32px icon is generated
         bool large = false; // when true, rendered as a prominent 32px "hero" button
+        bool checkbox = false; // when true, rendered as a ribbon check box that reflects on/off state
     };
 
     struct RibbonPanel
@@ -70,6 +71,18 @@ void CMainFrame::CreateRibbon()
     const Painter zoomIn = [](Gdiplus::Graphics& g) { Icons::PaintMagnifier(g, true); };
     const Painter zoomOut = [](Gdiplus::Graphics& g) { Icons::PaintMagnifier(g, false); };
 
+    // Additional glyph icons for commands that previously had none. All glyphs are
+    // drawn from Segoe UI Symbol (the font used for every other generated icon) so
+    // they render consistently in both light and dark mode.
+    const Painter loadIcon    = Icons::Char(L'↓', Icons::NeutralRef());
+    const Painter saveIcon    = Icons::Char(L'↑', Icons::NeutralRef());
+    const Painter hashIcon    = Icons::Char(L'#', Icons::NeutralRef());
+    const Painter treemapIcon = Icons::Char(L'▦', Icons::NeutralRef());
+    const Painter aboutIcon   = Icons::Char(L'ℹ', Icons::NeutralRef());
+    const Painter exitIcon    = Icons::Char(L'✕', Icons::NeutralRef());
+    const Painter moveIcon    = Icons::Char(L'→', Icons::NeutralRef());
+    const Painter consoleIcon = [](Gdiplus::Graphics& g) { Icons::PaintOpenInConsole(g); };
+
     std::vector<RibbonCategory> categories;
 
     // ---- File ----
@@ -78,16 +91,16 @@ void CMainFrame::CreateRibbon()
         { L(IDS_RIB_SCAN), {
             { ID_FILE_SELECT, L(IDS_MENU_SELECT), Icons::PaintFileSelect, true } } },
         { L(IDS_RIB_RESULTS), {
-            { ID_LOAD_RESULTS, L(IDS_MENU_LOAD_RESULTS), {} },
-            { ID_SAVE_RESULTS, L(IDS_MENU_SAVE_RESULTS), {} },
-            { ID_SAVE_DUPLICATES, L(IDS_MENU_SAVE_DUPLICATES), {} },
-            { ID_SAVE_PERMISSIONS, L(IDS_MENU_SAVE_PERMISSIONS), {} } } },
+            { ID_LOAD_RESULTS, L(IDS_MENU_LOAD_RESULTS), loadIcon },
+            { ID_SAVE_RESULTS, L(IDS_MENU_SAVE_RESULTS), saveIcon },
+            { ID_SAVE_DUPLICATES, L(IDS_MENU_SAVE_DUPLICATES), saveIcon },
+            { ID_SAVE_PERMISSIONS, L(IDS_MENU_SAVE_PERMISSIONS), saveIcon } } },
         { L(IDS_RIB_REFRESH), {
             { ID_REFRESH_ALL, L(IDS_MENU_REFRESH_ALL), refreshAll, true },
             { ID_REFRESH_SELECTED, L(IDS_MENU_REFRESH_SELECTED), Icons::PaintRefreshSelected } } },
         { L(IDS_RIB_APP), {
             { ID_RUN_ELEVATED, L(IDS_MENU_ELEVATED), {} },
-            { ID_APP_EXIT, L(IDS_MENU_EXIT), {} } } },
+            { ID_APP_EXIT, L(IDS_MENU_EXIT), exitIcon } } },
     } });
 
     // ---- Edit ----
@@ -99,7 +112,7 @@ void CMainFrame::CreateRibbon()
             { ID_SEARCH, L(IDS_MENU_SEARCH), search, true },
             { ID_FILTER_EXCLUDE_ITEM, L(IDS_MENU_EXCLUDE_ITEM), [](Gdiplus::Graphics& g) { Icons::PaintFilter(g); } } } },
         { L(IDS_RIB_HASH), {
-            { ID_COMPUTE_HASH, L(IDS_COMPUTE_HASH), {} } } },
+            { ID_COMPUTE_HASH, L(IDS_COMPUTE_HASH), hashIcon } } },
     } });
 
     // ---- Clean Up ----
@@ -109,14 +122,14 @@ void CMainFrame::CreateRibbon()
             { ID_CLEANUP_OPEN_SELECTED, L(IDS_MENU_OPEN), Icons::PaintOpenSelected, true },
             { ID_CLEANUP_EXPLORER_SELECT, L(IDS_MENU_EXPLORER_SELECT), Icons::PaintExplorerSelect },
             { ID_CLEANUP_OPEN_IN_CONSOLE, L(IDS_MENU_CONSOLE), Icons::PaintOpenInConsole },
-            { ID_CLEANUP_OPEN_IN_PWSH, L(IDS_MENU_PWSH), {} },
+            { ID_CLEANUP_OPEN_IN_PWSH, L(IDS_MENU_PWSH), consoleIcon },
             { ID_CLEANUP_PROPERTIES, L(IDS_MENU_PROPERTIES), Icons::PaintProperties } } },
         { L(IDS_RIB_DELETE), {
             { ID_CLEANUP_DELETE, L(IDS_MENU_DELETE), Icons::PaintDelete, true },
             { ID_CLEANUP_DELETE_BIN, L(IDS_MENU_DELETE_BIN), Icons::PaintDeleteBin },
             { ID_CLEANUP_EMPTY_BIN, L(IDS_MENU_EMPTY_BIN), {} },
             { ID_CLEANUP_EMPTY_FOLDER, L(IDS_MENU_EMPTY_FOLDER), {} },
-            { ID_CLEANUP_MOVE_TO, L(IDS_MENU_MOVE_TO), {} } } },
+            { ID_CLEANUP_MOVE_TO, L(IDS_MENU_MOVE_TO), moveIcon } } },
         { L(IDS_RIB_COMPRESS), {
             { ID_COMPRESS_NONE, L(IDS_MENU_COMPRESS_NONE), {} },
             { ID_COMPRESS_LZNT1, L(IDS_MENU_COMPRESS_LZNT1), {} },
@@ -157,14 +170,14 @@ void CMainFrame::CreateRibbon()
     categories.push_back({ L(IDS_MENU_VIEW),
     {
         { L(IDS_RIB_SHOW), {
-            { ID_VIEW_SHOWTREEMAP, L(IDS_MENU_SHOW), {} },
+            { ID_VIEW_SHOWTREEMAP, L(IDS_MENU_SHOW), treemapIcon },
             { ID_VIEW_FLAMEGRAPH, L(IDS_MENU_FLAMEGRAPH), {} } } },
         { L(IDS_RIB_SIZE), {
             { ID_TREEMAP_LOGICAL_SIZE, L(IDS_MENU_LOGICAL_SIZE), {} },
             { ID_TREEMAP_PHYSICAL_SIZE, L(IDS_MENU_PHYSICAL_SIZE), {} } } },
         { L(IDS_RIB_TREEMAP), {
-            { ID_TREEMAP_SHOW_EXTENSIONS, L(IDS_MENU_TREEMAP_SHOW_EXTENSIONS), {} },
-            { ID_TREEMAP_SHOW_FOLDER_FRAMES, L(IDS_MENU_TREEMAP_SHOW_FOLDER_FRAMES), {} } } },
+            { ID_TREEMAP_SHOW_EXTENSIONS, L(IDS_MENU_TREEMAP_SHOW_EXTENSIONS), {}, false, true },
+            { ID_TREEMAP_SHOW_FOLDER_FRAMES, L(IDS_MENU_TREEMAP_SHOW_FOLDER_FRAMES), {}, false, true } } },
         { L(IDS_RIB_ZOOM), {
             { ID_TREEMAP_ZOOMIN, L(IDS_MENU_ZOOMIN), zoomIn, true },
             { ID_TREEMAP_ZOOMOUT, L(IDS_MENU_ZOOMOUT), zoomOut },
@@ -208,15 +221,15 @@ void CMainFrame::CreateRibbon()
     categories.push_back({ L(IDS_MENU_OPTIONS),
     {
         { L(IDS_RIB_DISPLAY), {
-            { ID_VIEW_SHOWFREESPACE, L(IDS_MENU_FREE_SPACE), {} },
-            { ID_VIEW_SHOWUNKNOWN, L(IDS_MENU_SHOW_UNKNOWN), {} },
-            { ID_VIEW_SHOWFILETYPES, L(IDS_MENU_FILE_TYPES), {} },
-            { ID_VIEW_GROUP_TYPES, L(IDS_MENU_GROUP_TYPES), {} } } },
+            { ID_VIEW_SHOWFREESPACE, L(IDS_MENU_FREE_SPACE), {}, false, true },
+            { ID_VIEW_SHOWUNKNOWN, L(IDS_MENU_SHOW_UNKNOWN), {}, false, true },
+            { ID_VIEW_SHOWFILETYPES, L(IDS_MENU_FILE_TYPES), {}, false, true },
+            { ID_VIEW_GROUP_TYPES, L(IDS_MENU_GROUP_TYPES), {}, false, true } } },
         { L(IDS_RIB_INTERFACE), {
-            { ID_VIEW_TOOLBAR, L(IDS_MENU_TOOL_BAR), {} },
-            { ID_VIEW_LARGE_TOOLBAR, L(IDS_MENU_LARGE_TOOLBAR), {} },
-            { ID_VIEW_STATUS_BAR, L(IDS_MENU_STATUS_BAR), {} },
-            { ID_VIEW_RIBBON, L(IDS_MENU_RIBBON), {} } } },
+            { ID_VIEW_TOOLBAR, L(IDS_MENU_TOOL_BAR), {}, false, true },
+            { ID_VIEW_LARGE_TOOLBAR, L(IDS_MENU_LARGE_TOOLBAR), {}, false, true },
+            { ID_VIEW_STATUS_BAR, L(IDS_MENU_STATUS_BAR), {}, false, true },
+            { ID_VIEW_RIBBON, L(IDS_MENU_RIBBON), {}, false, true } } },
         { L(IDS_RIB_SETTINGS), {
             { ID_CONFIGURE, L(IDS_MENU_SETTINGS), Icons::PaintGear, true },
             { ID_VIEW_WINDOW_LAYOUT, L(IDS_WINDOW_LAYOUT), Icons::PaintWindowLayout, true } } },
@@ -228,7 +241,7 @@ void CMainFrame::CreateRibbon()
         { L(IDS_RIB_HELP), {
             { ID_HELP_MANUAL, L(IDS_MENU_HELP), Icons::PaintHelp, true },
             { ID_HELP_REPORTBUG, L(IDS_MENU_HELP_REPORT), {} },
-            { ID_APP_ABOUT, L(IDS_MENU_HELP_ABOUT), {} } } },
+            { ID_APP_ABOUT, L(IDS_MENU_HELP_ABOUT), aboutIcon } } },
     } });
 
     // Materialize the ribbon from the description above.
@@ -265,6 +278,16 @@ void CMainFrame::CreateRibbon()
                     CBitmap bmpLarge;
                     bmpLarge.Attach(Icons::MakeBitmap(32, button.painter));
                     largeIndex = largeImages.AddImage(bmpLarge, TRUE);
+                }
+
+                // Boolean options render as ribbon check boxes so their on/off state
+                // is visible directly in the ribbon (driven by the existing
+                // ON_UPDATE_COMMAND_UI SetCheck handlers), instead of as plain buttons
+                // that give no indication of whether the option is currently enabled.
+                if (button.checkbox)
+                {
+                    panel->Add(new CMFCRibbonCheckBox(button.id, button.text.c_str()));
+                    continue;
                 }
 
                 auto* ribbonButton = new CMFCRibbonButton(button.id, button.text.c_str(),

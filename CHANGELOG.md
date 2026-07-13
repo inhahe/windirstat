@@ -2,7 +2,7 @@
 # WinDirStat 2.7.X (Upcoming)
 
 Enhancements
-- Improved ribbon appearance with large "hero" buttons and additional icons
+- Improved ribbon appearance with large "hero" buttons, check boxes for toggle options, and additional icons
 - Added additional window layouts
 - Added per-user Explorer context menu registration
 - Added File Watcher toolbar controls
