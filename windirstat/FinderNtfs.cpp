@@ -159,7 +159,7 @@ using STANDARD_INFORMATION = struct STANDARD_INFORMATION
     ULONG FileAttributes;
 };
 
-bool FinderNtfsContext::LoadRoot(CItem* driveitem)
+bool FinderNtfsContext::LoadRoot(CItem* driveitem, const std::function<bool()>& isCancelled)
 {
     // Trim off excess characters
     std::wstring volumePath = driveitem->GetPathLong();
@@ -232,6 +232,11 @@ bool FinderNtfsContext::LoadRoot(CItem* driveitem)
         for (ULONGLONG bytesReadFromRun = 0; bytesToRead > 0;
             bytesReadFromRun += bytesRead, bytesToRead -= bytesRead, fileOffset.QuadPart += bytesRead)
         {
+            // Abort this data run promptly if the scan is being cancelled (e.g. the
+            // app is closing mid-scan). Checked every chunk so we never block shutdown
+            // for the full duration of a large volume's MFT read.
+            if (isCancelled()) return false;
+
             // Animate pacman
             driveitem->UpwardDrivePacman();
 

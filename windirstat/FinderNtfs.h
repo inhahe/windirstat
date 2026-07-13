@@ -53,7 +53,10 @@ class FinderNtfsContext final
 public:
 
     FinderNtfsContext() = default;
-    bool LoadRoot(CItem* driveitem);
+    // isCancelled is polled during the MFT read so a mid-scan shutdown can abort the
+    // (otherwise uninterruptible) parallel volume read promptly instead of running to
+    // completion. Defaults to "never cancelled" for callers that don't need it.
+    bool LoadRoot(CItem* driveitem, const std::function<bool()>& isCancelled = [] { return false; });
     bool IsLoaded() const { return m_isLoaded; }
 
     static constexpr ULONGLONG NtfsNodeRoot = 5;
