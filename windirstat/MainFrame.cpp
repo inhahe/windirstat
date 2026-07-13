@@ -668,8 +668,13 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
     m_wndDeadFocus.Create(this);
 
     // setup look and feel with dark mode support
+    // Light mode uses the modern Windows 7 visual manager (rounded, gradient ribbon
+    // tabs and panels); its style resources ship via afxribbon.rc, which this project
+    // links. Dark mode uses our own manager, which flat-draws every ribbon element
+    // itself - the Windows 7 manager's light Aero gradients would clash with the dark
+    // palette and are fully overridden there anyway.
     CMFCVisualManager::SetDefaultManager(DarkMode::IsDarkModeActive() ?
-        RUNTIME_CLASS(CDarkModeVisualManager) : RUNTIME_CLASS(CMFCVisualManagerWindows));
+        RUNTIME_CLASS(CDarkModeVisualManager) : RUNTIME_CLASS(CMFCVisualManagerWindows7));
 
     // apply dark mode to main frame window
     DarkMode::AdjustControls(GetSafeHwnd());

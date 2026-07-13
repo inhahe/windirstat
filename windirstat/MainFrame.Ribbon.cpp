@@ -83,6 +83,17 @@ void CMainFrame::CreateRibbon()
     const Painter moveIcon    = Icons::Char(L'→', Icons::NeutralRef());
     const Painter consoleIcon = [](Gdiplus::Graphics& g) { Icons::PaintOpenInConsole(g); };
 
+    // Neutral single-glyph icon helper for the many commands that otherwise ship no
+    // artwork. Every glyph used below was verified to exist in Segoe UI Symbol (the
+    // font all generated icons use), so none render as a "missing glyph" box.
+    const auto ic = [](const WCHAR ch) { return Icons::Char(ch, Icons::NeutralRef()); };
+
+    // Shared icons for the dynamically-built per-drive maintenance panels.
+    const Painter shadowIcon = ic(L'◷'); // snapshot / point-in-time copy
+    const Painter defragIcon = ic(L'◫'); // reorganized disk blocks
+    const Painter chkdskIcon = ic(L'☑'); // verified / checked volume
+    const Painter customIcon = ic(L'★'); // user-defined cleanup
+
     std::vector<RibbonCategory> categories;
 
     // ---- File ----
@@ -99,7 +110,7 @@ void CMainFrame::CreateRibbon()
             { ID_REFRESH_ALL, L(IDS_MENU_REFRESH_ALL), refreshAll, true },
             { ID_REFRESH_SELECTED, L(IDS_MENU_REFRESH_SELECTED), Icons::PaintRefreshSelected } } },
         { L(IDS_RIB_APP), {
-            { ID_RUN_ELEVATED, L(IDS_MENU_ELEVATED), {} },
+            { ID_RUN_ELEVATED, L(IDS_MENU_ELEVATED), ic(L'⇧') },
             { ID_APP_EXIT, L(IDS_MENU_EXIT), exitIcon } } },
     } });
 
@@ -127,32 +138,32 @@ void CMainFrame::CreateRibbon()
         { L(IDS_RIB_DELETE), {
             { ID_CLEANUP_DELETE, L(IDS_MENU_DELETE), Icons::PaintDelete, true },
             { ID_CLEANUP_DELETE_BIN, L(IDS_MENU_DELETE_BIN), Icons::PaintDeleteBin },
-            { ID_CLEANUP_EMPTY_BIN, L(IDS_MENU_EMPTY_BIN), {} },
-            { ID_CLEANUP_EMPTY_FOLDER, L(IDS_MENU_EMPTY_FOLDER), {} },
+            { ID_CLEANUP_EMPTY_BIN, L(IDS_MENU_EMPTY_BIN), ic(L'♻') },
+            { ID_CLEANUP_EMPTY_FOLDER, L(IDS_MENU_EMPTY_FOLDER), ic(L'∅') },
             { ID_CLEANUP_MOVE_TO, L(IDS_MENU_MOVE_TO), moveIcon } } },
         { L(IDS_RIB_COMPRESS), {
-            { ID_COMPRESS_NONE, L(IDS_MENU_COMPRESS_NONE), {} },
-            { ID_COMPRESS_LZNT1, L(IDS_MENU_COMPRESS_LZNT1), {} },
-            { ID_COMPRESS_XPRESS4K, L(IDS_MENU_COMPRESS_XPRESS4K), {} },
-            { ID_COMPRESS_XPRESS8K, L(IDS_MENU_COMPRESS_XPRESS8K), {} },
-            { ID_COMPRESS_XPRESS16K, L(IDS_MENU_COMPRESS_XPRESS16K), {} },
-            { ID_COMPRESS_LZX, L(IDS_MENU_COMPRESS_LZX), {} } } },
+            { ID_COMPRESS_NONE, L(IDS_MENU_COMPRESS_NONE), ic(L'⊖') },
+            { ID_COMPRESS_LZNT1, L(IDS_MENU_COMPRESS_LZNT1), ic(L'⇲') },
+            { ID_COMPRESS_XPRESS4K, L(IDS_MENU_COMPRESS_XPRESS4K), ic(L'⇲') },
+            { ID_COMPRESS_XPRESS8K, L(IDS_MENU_COMPRESS_XPRESS8K), ic(L'⇲') },
+            { ID_COMPRESS_XPRESS16K, L(IDS_MENU_COMPRESS_XPRESS16K), ic(L'⇲') },
+            { ID_COMPRESS_LZX, L(IDS_MENU_COMPRESS_LZX), ic(L'⇲') } } },
         { L(IDS_RIB_ADVANCED), {
-            { ID_CLEANUP_SPARSIFY_FILE, L(IDS_MENU_SPARSIFY_FILE), {} },
-            { ID_CLEANUP_OPTIMIZE_VHD, L(IDS_MENU_OPTIMIZE_VHD), {} },
-            { ID_CLEANUP_CREATE_HARDLINK, L(IDS_MENU_CREATE_HARDLINK), {} },
-            { ID_CLEANUP_REMOVE_MOTW, L(IDS_MENU_REMOVE_MOTW), {} } } },
+            { ID_CLEANUP_SPARSIFY_FILE, L(IDS_MENU_SPARSIFY_FILE), ic(L'✂') },
+            { ID_CLEANUP_OPTIMIZE_VHD, L(IDS_MENU_OPTIMIZE_VHD), ic(L'⟳') },
+            { ID_CLEANUP_CREATE_HARDLINK, L(IDS_MENU_CREATE_HARDLINK), ic(L'⇄') },
+            { ID_CLEANUP_REMOVE_MOTW, L(IDS_MENU_REMOVE_MOTW), ic(L'⚐') } } },
         { L(IDS_RIB_SYSTEM), {
-            { ID_CLEANUP_HIBERNATE, L(IDS_MENU_DISABLE_HIBERNATE), {} },
-            { ID_CLEANUP_DISK_CLEANUP, L(IDS_MENU_DISK_CLEANUP), {} },
-            { ID_CLEANUP_STORAGE_SENSE, L(IDS_MENU_STORAGE_SENSE), {} },
-            { ID_CLEANUP_REMOVE_PROGRAMS, L(IDS_MENU_REMOVE_PROGRAMS), {} },
-            { ID_CLEANUP_REMOVE_ROAMING, L(IDS_MENU_REMOVE_ROAMING), {} },
-            { ID_CLEANUP_REMOVE_LOCAL, L(IDS_MENU_REMOVE_LOCAL), {} },
-            { ID_CLEANUP_REMOVE_SHADOW, L(IDS_MENU_REMOVE_SHADOW), {} },
-            { ID_CLEANUP_DISM_ANALYZE, L"/AnalyzeComponentStore", {} },
-            { ID_CLEANUP_DISM_NORMAL, L"/StartComponentCleanup", {} },
-            { ID_CLEANUP_DISM_RESET, L"/StartComponentCleanup /ResetBase", {} } } },
+            { ID_CLEANUP_HIBERNATE, L(IDS_MENU_DISABLE_HIBERNATE), ic(L'☾') },
+            { ID_CLEANUP_DISK_CLEANUP, L(IDS_MENU_DISK_CLEANUP), ic(L'⊛') },
+            { ID_CLEANUP_STORAGE_SENSE, L(IDS_MENU_STORAGE_SENSE), ic(L'◷') },
+            { ID_CLEANUP_REMOVE_PROGRAMS, L(IDS_MENU_REMOVE_PROGRAMS), ic(L'⊖') },
+            { ID_CLEANUP_REMOVE_ROAMING, L(IDS_MENU_REMOVE_ROAMING), ic(L'⊖') },
+            { ID_CLEANUP_REMOVE_LOCAL, L(IDS_MENU_REMOVE_LOCAL), ic(L'⊖') },
+            { ID_CLEANUP_REMOVE_SHADOW, L(IDS_MENU_REMOVE_SHADOW), ic(L'⊖') },
+            { ID_CLEANUP_DISM_ANALYZE, L"/AnalyzeComponentStore", ic(L'⚙') },
+            { ID_CLEANUP_DISM_NORMAL, L"/StartComponentCleanup", ic(L'⚙') },
+            { ID_CLEANUP_DISM_RESET, L"/StartComponentCleanup /ResetBase", ic(L'⚙') } } },
     } };
 
     // User-defined cleanups (dynamic, only the enabled ones)
@@ -161,7 +172,7 @@ void CMainFrame::CreateRibbon()
     {
         auto& udc = COptions::UserDefinedCleanups[i];
         if (!udc.Enabled) continue;
-        customCleanup.buttons.push_back({ ID_USERDEFINEDCLEANUP0 + i, udc.Title.Obj(), {} });
+        customCleanup.buttons.push_back({ ID_USERDEFINEDCLEANUP0 + i, udc.Title.Obj(), customIcon });
     }
     if (!customCleanup.buttons.empty()) cleanup.panels.push_back(std::move(customCleanup));
     categories.push_back(std::move(cleanup));
@@ -171,7 +182,7 @@ void CMainFrame::CreateRibbon()
     {
         { L(IDS_RIB_SHOW), {
             { ID_VIEW_SHOWTREEMAP, L(IDS_MENU_SHOW), treemapIcon },
-            { ID_VIEW_FLAMEGRAPH, L(IDS_MENU_FLAMEGRAPH), {} } } },
+            { ID_VIEW_FLAMEGRAPH, L(IDS_MENU_FLAMEGRAPH), ic(L'☰') } } },
         { L(IDS_RIB_SIZE), {
             { ID_TREEMAP_LOGICAL_SIZE, L(IDS_MENU_LOGICAL_SIZE), {} },
             { ID_TREEMAP_PHYSICAL_SIZE, L(IDS_MENU_PHYSICAL_SIZE), {} } } },
@@ -181,21 +192,21 @@ void CMainFrame::CreateRibbon()
         { L(IDS_RIB_ZOOM), {
             { ID_TREEMAP_ZOOMIN, L(IDS_MENU_ZOOMIN), zoomIn, true },
             { ID_TREEMAP_ZOOMOUT, L(IDS_MENU_ZOOMOUT), zoomOut },
-            { ID_TREEMAP_ZOOMRESET, L(IDS_MENU_ZOOMRESET), {} },
-            { ID_TREEMAP_RESELECT_CHILD, L(IDS_MENU_RESELECT_CHILD), {} },
-            { ID_TREEMAP_SELECT_PARENT, L(IDS_MENU_SELECT_PARENT), {} } } },
+            { ID_TREEMAP_ZOOMRESET, L(IDS_MENU_ZOOMRESET), ic(L'⟲') },
+            { ID_TREEMAP_RESELECT_CHILD, L(IDS_MENU_RESELECT_CHILD), ic(L'↧') },
+            { ID_TREEMAP_SELECT_PARENT, L(IDS_MENU_SELECT_PARENT), ic(L'↥') } } },
     } });
 
     // ---- Tools ----
     RibbonCategory tools{ L(IDS_MENU_TOOLS),
     {
         { L(IDS_RIB_ANALYZE), {
-            { ID_TOOLS_WATCHER, L(IDS_MENU_WATCHER), {} },
-            { ID_TOOLS_PERMISSIONS, L(IDS_MENU_PERMISSIONS), {} },
-            { ID_TOOLS_STORAGE_ANALYTICS, L(IDS_MENU_STORAGE_ANALYTICS), {} } } },
+            { ID_TOOLS_WATCHER, L(IDS_MENU_WATCHER), ic(L'◉') },
+            { ID_TOOLS_PERMISSIONS, L(IDS_MENU_PERMISSIONS), ic(L'⛨') },
+            { ID_TOOLS_STORAGE_ANALYTICS, L(IDS_MENU_STORAGE_ANALYTICS), ic(L'▤') } } },
         { L(IDS_RIB_MODIFY), {
-            { ID_TOOLS_SET_DATES, L(IDS_MENU_SET_DATES), {} },
-            { ID_TOOLS_REMOVE_EMPTY, L(IDS_MENU_REMOVE_EMPTY), {} } } },
+            { ID_TOOLS_SET_DATES, L(IDS_MENU_SET_DATES), ic(L'⏱') },
+            { ID_TOOLS_REMOVE_EMPTY, L(IDS_MENU_REMOVE_EMPTY), ic(L'⊖') } } },
     } };
 
     // Per-drive disk-maintenance panels (built once at ribbon creation)
@@ -208,9 +219,9 @@ void CMainFrame::CreateRibbon()
         const std::wstring displayName = volumeName.empty()
             ? GetDrive(drive) : std::format(L"{:.2} ({})", drive, volumeName);
         const int driveIndex = std::toupper(drive[0]) - L'A';
-        shadow.buttons.push_back({ static_cast<UINT>(ID_TOOLS_SHADOW_COPY_BASE + driveIndex), displayName, {} });
-        defrag.buttons.push_back({ static_cast<UINT>(ID_TOOLS_DEFRAG_BASE + driveIndex), displayName, {} });
-        chkdsk.buttons.push_back({ static_cast<UINT>(ID_TOOLS_CHKDSK_BASE + driveIndex), displayName, {} });
+        shadow.buttons.push_back({ static_cast<UINT>(ID_TOOLS_SHADOW_COPY_BASE + driveIndex), displayName, shadowIcon });
+        defrag.buttons.push_back({ static_cast<UINT>(ID_TOOLS_DEFRAG_BASE + driveIndex), displayName, defragIcon });
+        chkdsk.buttons.push_back({ static_cast<UINT>(ID_TOOLS_CHKDSK_BASE + driveIndex), displayName, chkdskIcon });
     }
     if (!shadow.buttons.empty()) tools.panels.push_back(std::move(shadow));
     if (!defrag.buttons.empty()) tools.panels.push_back(std::move(defrag));
