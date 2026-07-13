@@ -1,0 +1,34 @@
+name: Publish betas to WinGet
+on:
+  release:
+    types: [published]
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Get version
+        id: get-version
+        run: |
+          Write-Host "github.ref_name: ${{ github.ref_name }}"
+          Write-Host "github.ref: ${{ github.ref }}"        
+          # Finding the version from beta tag name
+          if ("${{ github.ref_name }}" -imatch "^beta/")
+          {
+              $VERSION="${{ github.ref_name }}" -ireplace '^beta/v?' -ireplace '/', '.'
+              "version=$VERSION" >> $env:GITHUB_OUTPUT
+              "skip=false" >> $env:GITHUB_OUTPUT
+          }
+          else
+          {
+              "skip=true" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+      - name: Call winget-releaser action
+        id: call-winget-releaser
+        if: ${{ steps.get-version.outputs.skip != 'true' }}
+        uses: vedantmgoyal9/winget-releaser@main
+        with:
+          identifier: WinDirStat.WinDirStat.Beta
+          version: ${{ steps.get-version.outputs.version }}
+          installers-regex: '\.(msi|msixbundle)$' # .msi and .msixbundle files
+          token: ${{ secrets.WINGET_TOKEN }}

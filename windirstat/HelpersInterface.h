@@ -1,0 +1,144 @@
+﻿// WinDirStat - Directory Statistics
+// Copyright © WinDirStat Team
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 2 of the License, or
+// at your option any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+#pragma once
+
+#include "pch.h"
+
+// Interface helpers declarations
+
+// Locale and formatting
+std::wstring GetLocaleString(LCTYPE lctype, LCID lcid);
+std::wstring GetLocaleString(const LCTYPE lctype, const std::wstring& localeName);
+std::wstring GetLocaleLanguage(LANGID langid);
+wchar_t GetLocaleThousandSeparator() noexcept;
+wchar_t GetLocaleDecimalSeparator() noexcept;
+std::wstring FormatBytes(ULONGLONG n) noexcept;
+std::wstring FormatSizeSuffixes(ULONGLONG n) noexcept;
+std::wstring FormatCount(ULONGLONG n) noexcept;
+std::wstring FormatDouble(double d) noexcept;
+std::wstring FormatFileTime(const FILETIME& t, bool seconds = false) noexcept;
+std::wstring FormatAttributes(DWORD attr) noexcept;
+std::wstring FormatHex(const std::vector<BYTE>& bytes, bool upper = true) noexcept;
+std::wstring FormatMilliseconds(ULONGLONG ms) noexcept;
+std::wstring FormatVolumeNameOfRootPath(const std::wstring& rootPath);
+std::wstring FormatVolumeName(const std::wstring& rootPath, const std::wstring& volumeName);
+
+// File and path helpers
+std::wstring GetFolderNameFromPath(std::wstring_view path);
+std::wstring GetBaseNameFromPath(std::wstring_view path);
+std::wstring GlobToRegex(const std::wstring& glob, bool useAnchors = true);
+
+// String helpers
+void ReplaceString(std::wstring& subject, std::wstring_view search, std::wstring_view replace);
+std::wstring& TrimString(std::wstring& s, wchar_t c = L' ', bool endOnly = false) noexcept;
+std::wstring MakeLower(const std::wstring& s);
+std::wstring JoinString(const std::vector<std::wstring>& items, WCHAR delim = wds::chrPipe);
+std::vector<std::wstring> SplitString(const std::wstring& string, WCHAR delim = wds::chrPipe);
+
+// Attribute parsing
+DWORD ParseAttributes(const std::wstring_view& attributes) noexcept;
+
+// Size specifiers
+const std::wstring& GetSpec_Bytes() noexcept;
+const std::wstring& GetSpec_KiB() noexcept;
+const std::wstring& GetSpec_MiB() noexcept;
+const std::wstring& GetSpec_GiB() noexcept;
+const std::wstring& GetSpec_TiB() noexcept;
+
+// System information
+std::wstring GetCOMSPEC();
+const std::wstring& GetSysDirectory() noexcept;
+
+// UI helpers
+void WaitForHandleWithRepainting(HANDLE h, DWORD TimeOut = INFINITE) noexcept;
+void ProcessMessagesUntilSignaled(const std::function<void()>& callback);
+void DisplayError(const std::wstring& error);
+std::wstring TranslateError(HRESULT hr = static_cast<HRESULT>(GetLastError()));
+bool ShellExecuteWrapper(const std::wstring& lpFile, const std::wstring& lpParameters = L"",
+        const std::wstring& lpVerb = L"", HWND hwnd = *AfxGetMainWnd(),
+        const std::wstring& lpDirectory = L"", INT nShowCmd = SW_NORMAL);
+bool ExecuteCommandInConsole(const std::wstring& command, const std::wstring& title = L"");
+void SetMenuItem(CMenu* menu, int pos, bool enable, bool isCommand = false);
+bool IsMenuEnabled(const CMenu* menu, UINT pos, bool isCommand = false) noexcept;
+
+// DPI scaling
+int DpiRest(int value, const CWnd* wnd = nullptr) noexcept;
+int DpiSave(int value, const CWnd* wnd = nullptr) noexcept;
+
+// Shell item array
+class CItem;
+CComPtr<IShellItemArray> CreateShellItemArray(const std::vector<CItem*>& items);
+
+// Context menu
+constexpr auto CONTENT_MENU_MINCMD = 0x1ul;
+constexpr auto CONTENT_MENU_MAXCMD = 0x7FFFul;
+IContextMenu* GetContextMenu(HWND hwnd, const std::vector<std::wstring>& paths);
+
+// Application info
+std::wstring GetAppFileName(const std::wstring& ext = L"");
+std::wstring GetAppFolder();
+
+// Resources
+std::vector<BYTE> GetCompressedResource(HRSRC resource) noexcept;
+std::wstring GetTextResource(UINT id);
+std::wstring GetAcceleratorString(UINT commandID);
+
+// Input state
+inline bool IsControlKeyDown() noexcept { return (HSHELL_HIGHBIT & GetKeyState(VK_CONTROL)) != 0; };
+inline bool IsShiftKeyDown() noexcept { return (HSHELL_HIGHBIT & GetKeyState(VK_SHIFT)) != 0; };
+
+// Tree node drawing helper
+void DrawTreeNodeConnector(CDC* pdc, const CRect& nodeRect, COLORREF bgColor,
+    bool toTop, bool toBottom, bool toRight, bool showPlus = false, bool showMinus = false);
+
+// Rect struct
+using CSmallRect = struct CSmallRect
+{
+    WORD left = 0, top = 0, right = 0, bottom = 0;
+
+    // Default constructor
+    constexpr CSmallRect() noexcept = default;
+
+    // Constructor from CRect
+    explicit constexpr CSmallRect(const CRect& rect) noexcept :
+        left(static_cast<WORD>(rect.left)), top(static_cast<WORD>(rect.top)),
+        right(static_cast<WORD>(rect.right)), bottom(static_cast<WORD>(rect.bottom)) {}
+
+    // Assignment from CRect
+    constexpr CSmallRect& operator=(const CRect& rect) noexcept
+    {
+        left = static_cast<WORD>(rect.left);
+        top = static_cast<WORD>(rect.top);
+        right = static_cast<WORD>(rect.right);
+        bottom = static_cast<WORD>(rect.bottom);
+        return *this;
+    }
+
+    // Conversion to CRect
+    operator CRect() const noexcept
+    {
+        return { left, top, right, bottom };
+    }
+};
+
+inline CRect ClientRectOf(const CWnd* hWnd)
+{
+    CRect rc;
+    ::GetClientRect(*hWnd, &rc);
+    return rc;
+}

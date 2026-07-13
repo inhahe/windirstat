@@ -1,0 +1,13 @@
+/.git/
+/.claude/
+/.vs/
+/publish/
+/contrib/
+/build/
+/enc_temp_folder/
+intermediate/
+*.aps
+*.bin
+*.vcxproj.user
+*.lastcodeanalysissucceeded
+*_combined.txt

@@ -1,0 +1,251 @@
+﻿// WinDirStat - Directory Statistics
+// Copyright © WinDirStat Team
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 2 of the License, or
+// at your option any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+#pragma once
+
+#include "pch.h"
+#include "TreeListControl.h"
+
+class CItem;
+class CItemDupe;
+class CItemTop;
+class CItemSearch;
+class CWinDirStatPane;
+enum LOGICAL_FOCUS : uint8_t;
+
+//
+// Data stored for each extension.
+//
+struct alignas(std::hardware_destructive_interference_size) SExtensionRecord
+{
+    std::atomic<ULONGLONG> files = 0;
+    std::atomic<ULONGLONG> bytes = 0;
+    COLORREF color = 0;
+
+    // Use relaxed memory ordering for simple accumulation operations
+    void AddFile(const ULONGLONG size) noexcept
+    {
+        files.fetch_add(1, std::memory_order_relaxed);
+        bytes.fetch_add(size, std::memory_order_relaxed);
+    }
+
+    void RemoveFile(const ULONGLONG size) noexcept
+    {
+        files.fetch_sub(1, std::memory_order_relaxed);
+        bytes.fetch_sub(size, std::memory_order_relaxed);
+    }
+
+    ULONGLONG GetFiles() const noexcept { return files.load(std::memory_order_relaxed); }
+    ULONGLONG GetBytes() const noexcept { return bytes.load(std::memory_order_relaxed); }
+};
+
+//
+// Maps an extension to an SExtensionRecord.
+//
+using CExtensionData = std::unordered_map<std::wstring, SExtensionRecord>;
+
+//
+// Model changes that panes can respond to.
+//
+enum MODEL_CHANGE : std::uint8_t
+{
+    MODEL_CHANGE_NONE,                // General update
+    MODEL_CHANGE_NEW_ROOT,            // Root item has changed - clear everything.
+    MODEL_CHANGE_SELECTION_ACTION,    // Inform central selection handler to update selection (uses item)
+    MODEL_CHANGE_SELECTION_REFRESH,   // Inform all views to redraw based on current selections
+    MODEL_CHANGE_SELECTION_STYLE,     // Only update selection in TreeMapView
+    MODEL_CHANGE_EXTENSION_SELECTION, // Type list selected a new extension
+    MODEL_CHANGE_ZOOM,                // Only zoom item has changed.
+    MODEL_CHANGE_LIST_STYLE,          // Options: List style (grid/stripes) or treelist colors changed
+    MODEL_CHANGE_TREEMAP_STYLE,       // Options: Treemap style (grid, colors etc.) changed
+    MODEL_CHANGE_SIZE_MODE            // Options: Size mode (logical vs physical) changed
+};
+
+//
+// CWinDirStatModel. The application model.
+// Owner of the root item and various other data (see data members).
+//
+class CWinDirStatModel final : public CCmdTarget
+{
+    friend class CWinDirStatPane;
+
+public:
+    static CWinDirStatModel* Get() { return s_singleton; }
+    CWinDirStatModel();
+    ~CWinDirStatModel() override;
+
+    void ClearScanState();
+    BOOL ResetScan();
+    BOOL StartScan(const std::wstring& pathSpec);
+    BOOL OpenLoadedScan(CItem* loadedRoot,
+        const std::vector<std::pair<CItem*, std::wstring>>& dupeHashes = {});
+    void SetScanPathSpec(const std::wstring& pathSpec);
+    const std::wstring& GetScanPathSpec() const { return m_scanPathSpec; }
+    const std::wstring& GetScanTitle() const { return m_scanTitle; }
+    void SetScanTitle(const std::wstring& title) { m_scanTitle = title; }
+    void SetScanTitlePrefix(const std::wstring& prefix) const;
+
+    COLORREF GetCushionColor(const std::wstring& ext);
+    COLORREF GetZoomColor() const;
+
+    CExtensionData* GetExtensionData();
+    SExtensionRecord* GetExtensionDataRecord(const std::wstring& ext);
+    bool IsExtensionRegistered(const std::wstring& ext) const;
+    ULONGLONG GetRootSize() const;
+
+    void RefreshReparsePointItems();
+
+    bool HasRootItem() const;
+    bool IsRootDone() const;
+    bool IsScanRunning() const;
+    bool IsScanSettled() const;
+    CItem* GetRootItem() const;
+    CItem* GetZoomItem() const;
+    bool IsZoomed() const;
+
+    void SetHighlightExtension(const std::wstring& ext, bool unregistered = false);
+    std::wstring GetHighlightExtension() const;
+    bool IsHighlightUnregistered() const;
+    const std::unordered_set<std::wstring>& GetHighlightExtensions() const;
+
+    void UnlinkRoot();
+    bool UserDefinedCleanupWorksForItem(USERDEFINEDCLEANUP* udc, const CItem* item) const;
+    void StartScanningEngine(std::vector<CItem*> items);
+    enum StopReason : uint8_t { Default, Stop, Abort };
+    void StopScanningEngine(StopReason stopReason = Stop);
+    void RefreshItem(const std::vector<CItem*>& item) const;
+    void RefreshItem(CItem* item) const { RefreshItem(std::vector{ item }); }
+
+    static void OpenItem(const CItem* item, const std::wstring& verb = {});
+
+    void RecurseRefreshReparsePoints(CItem* items) const;
+    void RebuildExtensionData();
+    void RebuildRegisteredExtensions();
+    void DeletePhysicalItems(const std::vector<CItem*>& items, bool toTrashBin, bool emptyOnly = false) const;
+    void SetZoomItem(CItem* item);
+    static void AskForConfirmation(USERDEFINEDCLEANUP* udc, const CItem* item);
+    void PerformUserDefinedCleanup(USERDEFINEDCLEANUP* udc, const CItem* item);
+    void RefreshAfterUserDefinedCleanup(const USERDEFINEDCLEANUP* udc, CItem* item, std::vector<CItem*> & refreshQueue) const;
+    void RecursiveUserDefinedCleanup(USERDEFINEDCLEANUP* udc, const std::wstring& rootPath, const std::wstring& currentPath);
+    static void CallUserDefinedCleanup(bool isDirectory, const std::wstring& format, const std::wstring& rootPath, const std::wstring& currentPath, bool showConsoleWindow, bool wait);
+    static std::wstring BuildUserDefinedCleanupCommandLine(const std::wstring& format, const std::wstring& rootPath, const std::wstring& currentPath);
+    void PushReselectChild(CItem* item);
+    CItem* PopReselectChild();
+    void ClearReselectChildStack();
+    bool IsReselectChildAvailable() const;
+    static CompressionAlgorithm CompressionIdToAlg(UINT id);
+    static bool FileTreeHasFocus();
+    static bool DupeListHasFocus();
+    static bool TopListHasFocus();
+    static bool SearchListHasFocus();
+    static bool WatcherListHasFocus();
+    static bool PermsListHasFocus();
+    std::vector<CItem*> GetAllSelected();
+    void InvalidateSelectionCache();
+    static CTreeListControl* GetFocusControl();
+    void NotifyPanes(MODEL_CHANGE change = MODEL_CHANGE_NONE, CItem* item = nullptr);
+
+private:
+    void RemoveLocalProfiles(std::wstring_view whereClause);
+    void NotifyPanesExcept(CWnd* sender, MODEL_CHANGE change = MODEL_CHANGE_NONE, CItem* item = nullptr);
+
+    static CWinDirStatModel* s_singleton;
+
+    std::wstring m_scanPathSpec;
+    std::wstring m_scanTitle;
+
+    CItem* m_rootItem = nullptr; // The very root item
+    CItem* m_zoomItem = nullptr;   // Current "zoom root"
+    std::wstring m_highlightExtension; // Currently highlighted extension
+    bool m_highlightUnregistered = false; // Highlight all unregistered extensions instead of one
+    std::unordered_set<std::wstring> m_highlightExtensions; // Precomputed unregistered set for the treemap highlight
+    std::unordered_set<std::wstring> m_registeredExtensions; // Snapshot of HKEY_CLASSES_ROOT extensions, rebuilt per scan
+
+    std::mutex m_extensionMutex;
+    CExtensionData m_extensionData;    // Base for the extension view and cushion colors
+
+    std::vector<CItem*> m_reselectChildStack; // Stack for the "Re-select Child"-Feature
+
+    std::unordered_map<std::wstring, BlockingQueue<CItem*>> m_queues; // The scanning and thread queue
+    std::optional<std::jthread> m_thread; // Wrapper thread so we do not occupy the UI thread
+
+    // Cache for GetAllSelected to avoid expensive queries
+    LOGICAL_FOCUS m_cachedFocus{};
+    std::vector<CItem*> m_cachedSelection;
+    bool m_selectionCacheValid = false;
+
+    bool m_showFreeSpace = COptions::ShowFreeSpace; // Whether to show the <Free Space> item
+    bool m_showUnknown = COptions::ShowUnknown;   // Whether to show the <Unknown> item
+
+    DECLARE_MESSAGE_MAP()
+    afx_msg void OnRefreshSelected();
+    afx_msg void OnRefreshAll();
+    afx_msg void OnSaveResults();
+    afx_msg void OnSaveDuplicates();
+    afx_msg void OnSavePermissions();
+    afx_msg void OnLoadResults();
+    afx_msg void OnEditCopy();
+    afx_msg void OnCleanupEmptyRecycleBin();
+    afx_msg void OnUpdateCentralHandler(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateCompressionHandler(CCmdUI* pCmdUI);
+    afx_msg void OnUpdateViewShowFreeSpace(CCmdUI* pCmdUI);
+    afx_msg void OnViewShowFreeSpace();
+    afx_msg void OnUpdateViewShowUnknown(CCmdUI* pCmdUI);
+    afx_msg void OnViewShowUnknown();
+    afx_msg void OnTreeMapZoomIn();
+    afx_msg void OnTreeMapZoomOut();
+    afx_msg void OnTreeMapZoomReset();
+    afx_msg void OnRemoveRoamingProfiles();
+    afx_msg void OnRemoveLocalProfiles();
+    afx_msg void OnDisableHibernateFile();
+    afx_msg void OnExecuteDiskCleanupUtility();
+    afx_msg void OnLaunchStorageSense();
+    afx_msg void OnExecuteProgramsFeatures();
+    afx_msg void OnExecuteDismAnalyze();
+    afx_msg void OnExecuteDismReset();
+    afx_msg void OnExecuteDism();
+    afx_msg void OnExplorerSelect();
+    afx_msg void OnCommandPromptHere();
+    afx_msg void OnPowerShellHere();
+    afx_msg void OnCleanupDeleteToBin();
+    afx_msg void OnCleanupDelete();
+    afx_msg void OnCleanupEmptyFolder();
+    afx_msg void OnSearch();
+    afx_msg void OnUpdateUserDefinedCleanup(CCmdUI* pCmdUI);
+    afx_msg void OnUserDefinedCleanup(UINT id);
+    afx_msg void OnTreeMapSelectParent();
+    afx_msg void OnTreeMapReselectChild();
+    afx_msg void OnCleanupOpenTarget();
+    afx_msg void OnCleanupProperties();
+    afx_msg void OnComputeHash();
+    afx_msg void OnCleanupCompress(UINT id);
+    afx_msg void OnCleanupOptimizeVhd();
+    afx_msg void OnCleanupSparsifyFile();
+    afx_msg void OnToolsSetDates();
+    afx_msg void OnToolsRemoveEmpty();
+    afx_msg void OnScanSuspend();
+    afx_msg void OnScanResume();
+    afx_msg void OnScanStop();
+    afx_msg void OnContextMenuExplore(UINT nID);
+    afx_msg void OnRemoveShadowCopies();
+    afx_msg void OnCleanupMoveTo();
+    afx_msg void OnRemoveMarkOfTheWebTags();
+    afx_msg void OnUpdateCreateHardlink(CCmdUI* pCmdUI);
+    afx_msg void OnCreateHardlink();
+    afx_msg void OnFilterExcludeItem();
+    afx_msg void OnPopupCancel() {}
+};
