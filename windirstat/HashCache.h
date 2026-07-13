@@ -60,6 +60,14 @@ public:
     // dropped. Silently starts empty if no valid cache file exists.
     void Load();
 
+    // Consults each NTFS volume's USN change journal and drops the entries of files that
+    // changed, were deleted, or were renamed since the cache was last saved. Precisely
+    // catches content changes the size/last-write-time check can miss. Requires elevation
+    // to read the journals; when a volume cannot be read it is left untouched. A per-volume
+    // cursor (journal id + resume USN) is advanced and persisted so the next run only reads
+    // the new records. Call once after Load().
+    void SyncWithUsnJournals();
+
     // Persists the cache to disk if it changed since the last save.
     void Save();
 
@@ -78,11 +86,20 @@ private:
         std::vector<BYTE> hashes[TierCount];
     };
 
+    // Per-volume position in the USN change journal, remembered so a later run can read
+    // only the records written since the cache was last synced.
+    struct JournalCursor
+    {
+        ULONGLONG journalId = 0; // journal instance the resume point belongs to
+        LONGLONG nextUsn = 0;    // USN one past the last record we have processed
+    };
+
     static std::wstring GetCacheFilePath();
     static ULONGLONG NowAsUInt64();
 
     std::shared_mutex m_mutex;
-    std::unordered_map<std::wstring, Entry> m_entries; // key = lowercase path
+    std::unordered_map<std::wstring, Entry> m_entries;         // key = lowercase path
+    std::unordered_map<std::uint32_t, JournalCursor> m_cursors; // key = volume serial
     bool m_dirty = false;
     bool m_loaded = false;
     int m_algorithm = -1; // hash algorithm the in-memory entries belong to

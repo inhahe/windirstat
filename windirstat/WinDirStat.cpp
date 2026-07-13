@@ -383,6 +383,12 @@ BOOL CDirStatApp::InitInstance()
     // without re-reading file bytes. Depends on the loaded hash-algorithm setting.
     CHashCache::Get().Load();
 
+    // Drop cache entries for files that changed since the cache was last saved, using
+    // each NTFS volume's USN change journal. Precisely catches content edits the
+    // size/last-write-time check can miss. Requires elevation to read the journals; if
+    // this instance is about to relaunch elevated (below), the elevated run performs it.
+    CHashCache::Get().SyncWithUsnJournals();
+
     // Silently restart elevated conditionally before any expensive initialization
     if (IsElevationAvailable() && COptions::AutoElevate && !COptions::ShowElevationPrompt) // only if user doesn't want to be prompted
     {

@@ -20,6 +20,7 @@
 #include "Options.h"
 #include "HelpersInterface.h"
 #include "WinDirStat.h"
+#include "UsnJournal.h"
 
 #include <filesystem>
 #include <fstream>
@@ -27,7 +28,9 @@
 namespace
 {
     constexpr char CACHE_MAGIC[4] = { 'W', 'D', 'H', 'C' };
-    constexpr std::uint32_t CACHE_VERSION = 1;
+    // Version 2 appends a per-volume USN-journal cursor table after the entries; the
+    // entry layout is unchanged, so version-1 files still load (just without cursors).
+    constexpr std::uint32_t CACHE_VERSION = 2;
 
     // Entries not used within this many days are dropped on load so the cache does
     // not grow without bound as files come and go.
@@ -156,7 +159,7 @@ void CHashCache::Load()
     std::uint32_t algorithm = 0;
     std::uint64_t count = 0;
     if (!in.read(magic, sizeof(magic)) || std::memcmp(magic, CACHE_MAGIC, sizeof(magic)) != 0) return;
-    if (!ReadPod(in, version) || version != CACHE_VERSION) return;
+    if (!ReadPod(in, version) || version < 1 || version > CACHE_VERSION) return;
     if (!ReadPod(in, algorithm)) return;
     if (!ReadPod(in, count)) return;
 
@@ -199,6 +202,124 @@ void CHashCache::Load()
         if (now > entry.lastUsed && now - entry.lastUsed > PRUNE_AGE_100NS) continue;
 
         m_entries.emplace(MakeLower(path), std::move(entry));
+    }
+
+    // Version 2+: read the per-volume USN-journal cursors. A short/corrupt table just
+    // means we start those volumes fresh (correctness is still guarded by size/mtime).
+    if (version >= 2)
+    {
+        std::uint32_t cursorCount = 0;
+        if (!ReadPod(in, cursorCount)) return;
+        for (std::uint32_t i = 0; i < cursorCount; ++i)
+        {
+            std::uint32_t serial = 0;
+            JournalCursor cursor;
+            if (!ReadPod(in, serial) || !ReadPod(in, cursor.journalId) || !ReadPod(in, cursor.nextUsn)) return;
+            m_cursors.emplace(serial, cursor);
+        }
+    }
+}
+
+void CHashCache::SyncWithUsnJournals()
+{
+    std::unique_lock lock(m_mutex);
+    if (m_entries.empty() && m_cursors.empty()) return;
+
+    // Map each mounted drive-letter root ("c:\\") to its NTFS volume serial. The cache
+    // keys are lowercase full paths, so their leading "x:" identifies the volume; file
+    // reference numbers are only unique within a volume, hence the serial grouping.
+    std::unordered_map<std::wstring, std::uint32_t> rootToSerial;
+    std::unordered_map<std::uint32_t, std::wstring> serialToRoot;
+    {
+        std::array<wchar_t, 512> drives{};
+        const DWORD len = GetLogicalDriveStringsW(static_cast<DWORD>(drives.size()), drives.data());
+        for (const wchar_t* d = drives.data(); d < drives.data() + len && *d != L'\0'; d += wcslen(d) + 1)
+        {
+            std::wstring root = d; // e.g. "C:\\"
+            DWORD serial = 0;
+            if (GetVolumeInformationW(root.c_str(), nullptr, 0, &serial, nullptr, nullptr, nullptr, 0) == 0) continue;
+            rootToSerial.emplace(MakeLower(root), serial);
+            serialToRoot.emplace(serial, root);
+        }
+    }
+
+    // Derives a volume serial from an entry's (already lowercase) path key.
+    const auto serialForKey = [&](const std::wstring& key) -> std::uint32_t
+    {
+        if (key.size() < 2 || key[1] != L':') return 0;
+        const std::wstring root = { key[0], L':', L'\\' };
+        const auto it = rootToSerial.find(root);
+        return it == rootToSerial.end() ? 0 : it->second;
+    };
+
+    // Collect the volumes worth checking: those that hold entries plus those we already
+    // have a cursor for.
+    std::unordered_set<std::uint32_t> serialsOfInterest;
+    for (const auto& key : m_entries | std::views::keys)
+    {
+        if (const std::uint32_t s = serialForKey(key); s != 0) serialsOfInterest.insert(s);
+    }
+    for (const auto& serial : m_cursors | std::views::keys) serialsOfInterest.insert(serial);
+
+    std::unordered_map<std::uint32_t, std::unordered_set<ULONGLONG>> changedBySerial;
+    std::unordered_set<std::uint32_t> dropAll;
+
+    for (const std::uint32_t serial : serialsOfInterest)
+    {
+        const auto rootIt = serialToRoot.find(serial);
+        if (rootIt == serialToRoot.end()) continue; // volume not currently mounted
+
+        const std::optional<UsnJournal::JournalState> state = UsnJournal::Query(rootIt->second);
+        if (!state.has_value()) continue; // cannot read journal (not elevated / not NTFS)
+
+        if (const auto cursorIt = m_cursors.find(serial); cursorIt != m_cursors.end())
+        {
+            const JournalCursor& cursor = cursorIt->second;
+            const bool usable = cursor.journalId == state->journalId &&
+                cursor.nextUsn >= state->firstUsn && cursor.nextUsn <= state->nextUsn;
+            if (usable)
+            {
+                // Read only the records written since we last synced this volume.
+                if (!UsnJournal::ReadChanges(rootIt->second, state->journalId, cursor.nextUsn, changedBySerial[serial]))
+                {
+                    dropAll.insert(serial);
+                }
+            }
+            else
+            {
+                // Journal was deleted/recreated or has wrapped past our resume point; we
+                // can no longer tell which files changed, so none can be trusted.
+                dropAll.insert(serial);
+            }
+        }
+        // else: first time we see this volume - nothing to invalidate retroactively.
+
+        // Advance (or establish) the cursor to the journal's current end.
+        m_cursors[serial] = JournalCursor{ state->journalId, state->nextUsn };
+        m_dirty = true;
+    }
+
+    if (changedBySerial.empty() && dropAll.empty()) return;
+
+    // Single pass over the cache dropping every entry that changed or lives on a volume
+    // whose journal we can no longer trust.
+    for (auto it = m_entries.begin(); it != m_entries.end();)
+    {
+        const std::uint32_t serial = serialForKey(it->first);
+        bool remove = dropAll.contains(serial);
+        if (!remove)
+        {
+            const auto ci = changedBySerial.find(serial);
+            remove = ci != changedBySerial.end() &&
+                ci->second.contains(it->second.fileIndex & UsnJournal::SegmentMask);
+        }
+
+        if (remove)
+        {
+            it = m_entries.erase(it);
+            m_dirty = true;
+        }
+        else ++it;
     }
 }
 
@@ -248,6 +369,15 @@ void CHashCache::Save()
                 if (!h.empty()) out.write(reinterpret_cast<const char*>(h.data()),
                     static_cast<std::streamsize>(h.size()));
             }
+        }
+
+        // Per-volume USN-journal cursors (version 2 trailer).
+        WritePod(out, static_cast<std::uint32_t>(m_cursors.size()));
+        for (const auto& [serial, cursor] : m_cursors)
+        {
+            WritePod(out, serial);
+            WritePod(out, cursor.journalId);
+            WritePod(out, cursor.nextUsn);
         }
 
         if (!out) return; // leave any previous cache intact on write failure
