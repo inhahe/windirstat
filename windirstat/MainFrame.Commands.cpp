@@ -641,6 +641,9 @@ static void PaintWatcherAutoScroll(Gdiplus::Graphics& g)
 
 void CMainFrame::RebuildToolBar()
 {
+    // In ribbon mode the classic toolbar is never created; nothing to rebuild.
+    if (m_wndToolBar.GetSafeHwnd() == nullptr) return;
+
     const auto imageSize = COptions::LargeToolBar ? 32 : 20;
     const auto scale = COptions::LargeToolBar ? (32.0f / 20.0f) : 1.0f;
 
@@ -809,6 +812,21 @@ void CMainFrame::OnUpdateViewLargeToolBar(CCmdUI* pCmdUI)
 {
     pCmdUI->SetCheck(COptions::LargeToolBar);
     pCmdUI->Enable((m_wndToolBar.GetStyle() & WS_VISIBLE) != 0);
+}
+
+void CMainFrame::OnViewRibbon()
+{
+    // The ribbon replaces the menu/toolbar and is built during frame creation,
+    // so switching requires a restart. Persist first so the setting survives the
+    // relaunch, then restart (RestartApplication saves remaining state via WM_CLOSE).
+    COptions::UseRibbon = !COptions::UseRibbon;
+    PersistedSetting::WritePersistedProperties();
+    CDirStatApp::Get()->RestartApplication();
+}
+
+void CMainFrame::OnUpdateViewRibbon(CCmdUI* pCmdUI)
+{
+    pCmdUI->SetCheck(COptions::UseRibbon);
 }
 
 void CMainFrame::OnConfigure()

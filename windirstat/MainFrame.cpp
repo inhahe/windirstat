@@ -430,6 +430,8 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWndEx)
     ON_COMMAND(ID_VIEW_SEARCH_RESULTS, &CMainFrame::OnViewSearchResults)
     ON_COMMAND(ID_VIEW_LARGE_TOOLBAR, &CMainFrame::OnViewLargeToolBar)
     ON_UPDATE_COMMAND_UI(ID_VIEW_LARGE_TOOLBAR, &CMainFrame::OnUpdateViewLargeToolBar)
+    ON_COMMAND(ID_VIEW_RIBBON, &CMainFrame::OnViewRibbon)
+    ON_UPDATE_COMMAND_UI(ID_VIEW_RIBBON, &CMainFrame::OnUpdateViewRibbon)
     ON_COMMAND_RANGE(ID_TOOLS_SHADOW_COPY_BASE, ID_TOOLS_SHADOW_COPY_BASE + wds::alphaSize, &CMainFrame::OnAdvancedShadowCopy)
     ON_COMMAND_RANGE(ID_TOOLS_DEFRAG_BASE, ID_TOOLS_DEFRAG_BASE + wds::alphaSize, &CMainFrame::OnAdvancedDefrag)
     ON_COMMAND_RANGE(ID_TOOLS_CHKDSK_BASE, ID_TOOLS_CHKDSK_BASE + wds::alphaSize, &CMainFrame::OnAdvancedChkdsk)
@@ -705,20 +707,29 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
         }
     }
 
-    m_wndToolBar.CreateEx(this, TBSTYLE_FLAT, WS_CHILD | WS_VISIBLE | CBRS_TOP | CBRS_TOOLTIPS | CBRS_SIZE_DYNAMIC);
-    m_wndToolBar.SetBorders(CRect());
-    m_wndToolBar.SetPaneStyle(m_wndToolBar.GetPaneStyle() & ~CBRS_GRIPPER);
-    m_wndToolBar.SetHeight(m_wndToolBar.GetRowHeight());
-    DockPane(&m_wndToolBar);
+    if (COptions::UseRibbon)
+    {
+        // Ribbon interface replaces both the classic menu bar and the docked toolbar.
+        CreateRibbon();
+        SetMenu(nullptr);
+    }
+    else
+    {
+        m_wndToolBar.CreateEx(this, TBSTYLE_FLAT, WS_CHILD | WS_VISIBLE | CBRS_TOP | CBRS_TOOLTIPS | CBRS_SIZE_DYNAMIC);
+        m_wndToolBar.SetBorders(CRect());
+        m_wndToolBar.SetPaneStyle(m_wndToolBar.GetPaneStyle() & ~CBRS_GRIPPER);
+        m_wndToolBar.SetHeight(m_wndToolBar.GetRowHeight());
+        DockPane(&m_wndToolBar);
 
-    // Save the default button size (DPI-scaled) before any SetSizes call
-    const auto initialButtonSize = m_wndToolBar.GetButtonSize();
-    m_defaultButtonSize = { DpiRest(initialButtonSize.cx), DpiRest(initialButtonSize.cy) };
-    RebuildToolBar();
+        // Save the default button size (DPI-scaled) before any SetSizes call
+        const auto initialButtonSize = m_wndToolBar.GetButtonSize();
+        m_defaultButtonSize = { DpiRest(initialButtonSize.cx), DpiRest(initialButtonSize.cy) };
+        RebuildToolBar();
+    }
 
     // Show or hide status bar if requested
     if (!COptions::ShowStatusBar) m_wndStatusBar.ShowWindow(SW_HIDE);
-    if (!COptions::ShowToolBar) m_wndToolBar.ShowWindow(SW_HIDE);
+    if (!COptions::UseRibbon && !COptions::ShowToolBar) m_wndToolBar.ShowWindow(SW_HIDE);
     m_wndDeadFocus.Create(this);
 
     // setup look and feel with dark mode support

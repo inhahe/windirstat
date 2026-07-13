@@ -239,6 +239,7 @@ protected:
 
     CMFCStatusBar m_wndStatusBar; // Status bar
     CMFCToolBar m_wndToolBar;     // Toolbar
+    CMFCRibbonBar m_wndRibbonBar; // Office-style ribbon; created instead of the toolbar/menu when COptions::UseRibbon
     CSize m_defaultButtonSize;    // Toolbar button size at creation (pre-SetSizes, DPI-scaled)
     CWdsProgressCtrl m_progress;  // Progress control. Is Create()ed and Destroy()ed again every time.
     CPacmanControl m_pacman;      // Static control for Pacman
@@ -288,6 +289,8 @@ protected:
     afx_msg void OnViewSearchResults() { GetFileTabbedView()->SetActiveSearchView(); }
     afx_msg void OnViewLargeToolBar();
     afx_msg void OnUpdateViewLargeToolBar(CCmdUI* pCmdUI);
+    afx_msg void OnViewRibbon();
+    afx_msg void OnUpdateViewRibbon(CCmdUI* pCmdUI);
     afx_msg void OnAdvancedShadowCopy(UINT nID);
     afx_msg void OnAdvancedDefrag(UINT nID);
     afx_msg void OnAdvancedChkdsk(UINT nID);
@@ -325,6 +328,7 @@ public:
     BOOL LoadFrame(UINT nIDResource, DWORD dwDefaultStyle = WS_OVERLAPPEDWINDOW | FWS_ADDTOTITLE, CWnd* pParentWnd = NULL, CCreateContext* pContext = NULL) override;
 
 private:
+    void CreateRibbon(); // Builds the tabbed ribbon (categories/panels/buttons); see MainFrame.Ribbon.cpp
     void BuildSplitterLayout(int topology, int permutation, HWND hFTV, HWND hExtV, HWND hGraph);
     void ConfigureSplitterCallbacks(int topology, int permutation);
 };

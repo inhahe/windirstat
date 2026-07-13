@@ -493,6 +493,9 @@
     <ClCompile Include="MainFrame.Commands.cpp">
       <Filter>Source Files\User Interface</Filter>
     </ClCompile>
+    <ClCompile Include="MainFrame.Ribbon.cpp">
+      <Filter>Source Files\User Interface</Filter>
+    </ClCompile>
     <ClCompile Include="LayoutPopup.cpp">
       <Filter>Source Files\User Interface</Filter>
     </ClCompile>

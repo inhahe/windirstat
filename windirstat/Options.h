@@ -172,6 +172,9 @@ public:
     static Setting<bool> ShowTimeSpent;
     static Setting<bool> ShowToolBar;
     static Setting<bool> LargeToolBar;
+    // When true, the classic menu bar and toolbar are replaced by an Office-style
+    // tabbed ribbon. Applied at startup, so toggling it restarts the application.
+    static Setting<bool> UseRibbon;
     static Setting<bool> ShowTreeMap;
     static Setting<bool> UseFlameGraph;
     static Setting<bool> ShowUnknown;

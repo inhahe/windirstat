@@ -603,6 +603,7 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClCompile Include="MainFrame.cpp">
     </ClCompile>
     <ClCompile Include="MainFrame.Commands.cpp" />
+    <ClCompile Include="MainFrame.Ribbon.cpp" />
     <ClCompile Include="Options.cpp">
     </ClCompile>
     <ClCompile Include="Pages\PageAdvanced.cpp" />
