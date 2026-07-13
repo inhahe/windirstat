@@ -389,8 +389,14 @@ BOOL CDirStatApp::InitInstance()
     // this instance is about to relaunch elevated (below), the elevated run performs it.
     CHashCache::Get().SyncWithUsnJournals();
 
-    // Silently restart elevated conditionally before any expensive initialization
-    if (IsElevationAvailable() && COptions::AutoElevate && !COptions::ShowElevationPrompt) // only if user doesn't want to be prompted
+    // Silently restart elevated before any expensive initialization when the user
+    // opted into automatic elevation. This is intentionally independent of the
+    // elevation prompt so the "Automatically elevate on startup" option works on
+    // its own: when it is enabled we elevate without ever asking. On success
+    // RunElevated terminates this process; if it returns (elevation unavailable or
+    // the UAC prompt was declined) we continue unelevated and skip the manual
+    // prompt below so the user is not asked twice.
+    if (IsElevationAvailable() && COptions::AutoElevate)
     {
         RunElevated(m_lpCmdLine);
     }
@@ -462,8 +468,9 @@ BOOL CDirStatApp::InitInstance()
         RtlSetProcessPlaceholderCompatibilityMode(PHCM_EXPOSE_PLACEHOLDERS);
     }
 
-    // Allow user to elevate if desired
-    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !hideApp)
+    // Allow user to elevate if desired. Skipped when AutoElevate is on: that path
+    // already tried to elevate above, so we must not prompt again here.
+    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !COptions::AutoElevate && !hideApp)
     {
         if (const auto [nID, isChecked] =
             CMessageBoxDlg::Show(Localization::Lookup(IDS_ELEVATION_QUESTION), Localization::Lookup(IDS_DONT_SHOW_AGAIN),

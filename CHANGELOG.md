@@ -11,6 +11,7 @@ Enhancements
 
 Bug Fixes
 - Corrected indeterminate progress dialog repainting
+- Fixed "Automatically elevate on startup" so it works on its own without also disabling the elevation prompt
 
 Miscellaneous
 - Split large MainFrame and WinDirStatModel source files
