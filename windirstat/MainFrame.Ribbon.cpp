@@ -74,8 +74,8 @@ void CMainFrame::CreateRibbon()
     // Additional glyph icons for commands that previously had none. All glyphs are
     // drawn from Segoe UI Symbol (the font used for every other generated icon) so
     // they render consistently in both light and dark mode.
-    const Painter loadIcon    = Icons::Char(L'↓', Icons::NeutralRef());
-    const Painter saveIcon    = Icons::Char(L'↑', Icons::NeutralRef());
+    const Painter loadIcon    = Icons::Char(L'⬇', Icons::NeutralRef());
+    const Painter saveIcon    = Icons::Char(L'⬆', Icons::NeutralRef());
     const Painter hashIcon    = Icons::Char(L'#', Icons::NeutralRef());
     const Painter treemapIcon = Icons::Char(L'▦', Icons::NeutralRef());
     const Painter aboutIcon   = Icons::Char(L'ℹ', Icons::NeutralRef());
