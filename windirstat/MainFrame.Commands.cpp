@@ -421,10 +421,6 @@ void CMainFrame::OnSize(const UINT nType, const int cx, const int cy)
             DpiRest(5, &m_wndStatusBar), DpiRest(4, &m_wndStatusBar));
         m_progress.MoveWindow(progRc);
     }
-    else if (m_pacman.m_hWnd != nullptr)
-    {
-        m_pacman.MoveWindow(rc);
-    }
 }
 
 /////////////////////////////////////////////////////////////////////////////

@@ -114,26 +114,6 @@ protected:
 };
 
 //
-// CPacmanControl. Pacman on the status bar.
-//
-class CPacmanControl final : public CWnd
-{
-public:
-    CPacmanControl() = default;
-    void Drive();
-    void Start();
-    void Stop();
-
-protected:
-    CPacman m_pacman;
-
-    DECLARE_MESSAGE_MAP()
-    afx_msg void OnPaint();
-    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
-    afx_msg BOOL OnEraseBkgnd(CDC* pDC);
-};
-
-//
 // CDeadFocusWnd. The focus in WinDirStat can be on
 // - the directory list
 // - the extension list,
@@ -167,7 +147,7 @@ protected:
     ~CMainFrame() override;
     DECLARE_DYNCREATE(CMainFrame)
 
-    void InitialShowWindow();
+    void InitialShowWindow(int nCmdShow);
     void InvokeInMessageThread(std::function<void()> callback) const;
 
     void RestoreGraphPane(bool forced = false);
@@ -218,8 +198,7 @@ protected:
     BOOL PreCreateWindow(CREATESTRUCT& cs) override;
     BOOL OnCmdMsg(UINT nID, int nCode, void* pExtra, AFX_CMDHANDLERINFO* pHandlerInfo) override;
 
-    void CreateStatusProgress();
-    void CreatePacmanProgress();
+    void CreateStatusProgress(bool marquee);
     void DestroyProgress();
 
     void SetStatusPaneText(const CDC& cdc, int pos, const std::wstring& text, int minWidth = 0);
@@ -229,8 +208,9 @@ protected:
     bool m_progressVisible = false; // True while progress must be shown (either pacman or progress bar)
     bool m_scanSuspend = false;     // True if the scan has been suspended
     bool m_shuttingDown = false;    // Marks the process is shutting down so we can exit timers
-    ULONGLONG m_progressRange = 0;  // Progress range. A range of 0 means Pacman should be used.
+    ULONGLONG m_progressRange = 0;  // Progress range. A range of 0 means an indeterminate (marquee) bar is shown.
     ULONGLONG m_progressPos = 0;    // Progress position (<= progressRange, or an item count in case of m_progressRang == 0)
+    bool m_progressMarquee = false; // True while the status progress bar is in indeterminate (marquee) mode
     CItem* m_workingItem = nullptr;
 
     CWdsSplitterWnd m_subSplitter{ COptions::SubSplitterPos.Ptr() }; // Contains the two upper views
@@ -242,7 +222,6 @@ protected:
     CMFCRibbonBar m_wndRibbonBar; // Office-style ribbon; created instead of the toolbar/menu when COptions::UseRibbon
     CSize m_defaultButtonSize;    // Toolbar button size at creation (pre-SetSizes, DPI-scaled)
     CWdsProgressCtrl m_progress;  // Progress control. Is Create()ed and Destroy()ed again every time.
-    CPacmanControl m_pacman;      // Static control for Pacman
     LOGICAL_FOCUS m_logicalFocus = LF_NONE; // Which view has the logical focus
     CDeadFocusWnd m_wndDeadFocus; // Zero-size window which holds the focus if logical focus is "NONE"
 

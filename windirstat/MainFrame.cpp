@@ -33,6 +33,12 @@
 #include "PagePrompts.h"
 #include "ProgressDlg.h"
 
+// Minimum wall-clock interval between (expensive) list-control re-sorts while a
+// scan is in progress. The UI timer fires every 25 ms to animate the progress
+// bar, but re-sorting the whole item list that often would saturate the UI
+// thread on large scans, so the sorts are throttled to this interval.
+static constexpr ULONGLONG LIST_SORT_INTERVAL_MS = 500;
+
 // Clipboard Opener
 class COpenClipboard final
 {
@@ -299,67 +305,6 @@ void CWdsSplitterWnd::OnSize(const UINT nType, const int cx, const int cy)
 
 /////////////////////////////////////////////////////////////////////////////
 
-void CPacmanControl::Drive()
-{
-    if (IsWindow(m_hWnd))
-    {
-        m_pacman.UpdatePosition();
-        RedrawWindow();
-    }
-}
-
-void CPacmanControl::Start()
-{
-    m_pacman.Start();
-}
-
-void CPacmanControl::Stop()
-{
-    m_pacman.Stop();
-}
-
-BEGIN_MESSAGE_MAP(CPacmanControl, CWnd)
-    ON_WM_PAINT()
-    ON_WM_CREATE()
-    ON_WM_ERASEBKGND()
-END_MESSAGE_MAP()
-
-int CPacmanControl::OnCreate(const LPCREATESTRUCT lpCreateStruct)
-{
-    if (CWnd::OnCreate(lpCreateStruct) == -1)
-    {
-        return -1;
-    }
-
-    m_pacman.Reset();
-    m_pacman.Start();
-    return 0;
-}
-
-BOOL CPacmanControl::OnEraseBkgnd(CDC* pDC)
-{
-    UNREFERENCED_PARAMETER(pDC);
-    return TRUE;
-}
-
-void CPacmanControl::OnPaint()
-{
-    CPaintDC dc(this);
-    CMemDC memDC(dc, this);
-    CDC* pDC = &memDC.GetDC();
-
-    // Draw the animation
-    const CRect rc = ClientRectOf(this);
-    m_pacman.Draw(pDC, rc, DarkMode::WdsSysColor(
-        DarkMode::IsDarkModeActive() ? COLOR_WINDOW : COLOR_BTNFACE));
-
-    // Draw the borders
-    CMFCVisualManager::GetInstance()->OnDrawStatusBarPaneBorder(
-        pDC, &CMainFrame::Get()->m_wndStatusBar, rc, 0, CMainFrame::Get()->GetStyle());
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
 void CDeadFocusWnd::Create(CWnd* parent)
 {
     const CRect rc(0, 0, 0, 0);
@@ -484,8 +429,9 @@ LRESULT CMainFrame::OnTaskButtonCreated(WPARAM, LPARAM)
 
 void CMainFrame::CreateProgress(ULONGLONG range)
 {
-    // Directory structure may contain other volume or internal loops
-    // so set range to indicate there is no range so display pacman
+    // Directory structure may contain other volume or internal loops so the
+    // total size cannot be known ahead of time; set range to 0 to indicate the
+    // progress should be shown as an indeterminate (marquee) bar.
     if (!COptions::ExcludeVolumeMountPoints ||
         !COptions::ExcludeJunctions ||
         !COptions::ExcludeSymbolicLinksDirectory)
@@ -496,14 +442,10 @@ void CMainFrame::CreateProgress(ULONGLONG range)
     m_progressRange = range;
     m_progressPos = 0;
     m_progressVisible = true;
-    if (range > 0)
-    {
-        CreateStatusProgress();
-    }
-    else
-    {
-        CreatePacmanProgress();
-    }
+
+    // Always show a progress bar; use an indeterminate (marquee) bar when the
+    // overall size is unknown (range == 0), otherwise a determinate bar.
+    CreateStatusProgress(range == 0);
 }
 
 void CMainFrame::UpdateProgressRange(const ULONGLONG range)
@@ -569,9 +511,8 @@ void CMainFrame::UpdateProgress()
     // Exit early if we are not ready for visual updates
     if (!m_progressVisible || m_workingItem == nullptr || currentRoot == nullptr) return;
 
-    // Update pacman graphic (does nothing if hidden)
+    // Update the scanned-size position
     m_progressPos = m_workingItem->GetProgressPos();
-    m_pacman.Drive();
 
     std::wstring titlePrefix;
     std::wstring suspended;
@@ -605,6 +546,12 @@ void CMainFrame::UpdateProgress()
     }
     else
     {
+        // Indeterminate (marquee) bar: repaint to advance the animation.
+        if (m_progressMarquee && m_progress.m_hWnd != nullptr && !IsScanSuspended())
+        {
+            m_progress.Invalidate(FALSE);
+        }
+
         static const std::wstring scanningString = Localization::Lookup(IDS_SCANNING);
         titlePrefix = scanningString + L" " + suspended;
     }
@@ -613,9 +560,10 @@ void CMainFrame::UpdateProgress()
     CWinDirStatModel::Get()->SetScanTitlePrefix(titlePrefix);
 }
 
-void CMainFrame::CreateStatusProgress()
+void CMainFrame::CreateStatusProgress(const bool marquee)
 {
     UpdatePaneText();
+    m_progressMarquee = marquee;
     if (m_progress.m_hWnd == nullptr)
     {
         CRect rc;
@@ -633,21 +581,13 @@ void CMainFrame::CreateStatusProgress()
             m_progress.ModifyStyleEx(WS_EX_STATICEDGE, 0);
         }
     }
+
+    // Toggle the marquee style; the custom OnPaint animates it via GetTickCount64.
+    m_progress.ModifyStyle(marquee ? 0 : PBS_MARQUEE, marquee ? PBS_MARQUEE : 0);
+
     if (m_taskbarList)
     {
         m_taskbarList->SetProgressState(*this, m_taskbarButtonState = TBPF_INDETERMINATE);
-    }
-}
-
-void CMainFrame::CreatePacmanProgress()
-{
-    if (m_pacman.m_hWnd == nullptr)
-    {
-        // Get rectangle and remove top/bottom border dimension
-        CRect rc;
-        m_wndStatusBar.GetItemRect(0, rc);
-        m_pacman.Create(nullptr, nullptr, WS_CHILD | WS_VISIBLE, rc, &m_wndStatusBar, ID_WDS_CONTROL);
-        m_pacman.Start();
     }
 }
 
@@ -658,13 +598,8 @@ void CMainFrame::DestroyProgress()
         m_progress.DestroyWindow();
         m_progress.m_hWnd = nullptr;
     }
-    else if (IsWindow(m_pacman.m_hWnd))
-    {
-        m_pacman.Stop();
-        m_pacman.DestroyWindow();
-        m_pacman.m_hWnd = nullptr;
-    }
 
+    m_progressMarquee = false;
     m_workingItem = nullptr;
     m_progressVisible = false;
     UpdatePaneText();
@@ -752,12 +687,30 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
     return 0;
 }
 
-void CMainFrame::InitialShowWindow()
+void CMainFrame::InitialShowWindow(const int nCmdShow)
 {
-    const WINDOWPLACEMENT wpsetting = COptions::MainWindowPlacement;
+    // Headless / hidden invocation (e.g. command-line save modes): just honor
+    // the requested show state and do not restore any saved placement.
+    if (nCmdShow == SW_HIDE)
+    {
+        ShowWindow(SW_HIDE);
+        SetTimer(ID_WDS_CONTROL, 25, nullptr);
+        return;
+    }
+
+    WINDOWPLACEMENT wpsetting = COptions::MainWindowPlacement;
     if (wpsetting.length != 0)
     {
+        // Restore the saved size / position / maximized state. Honor an explicit
+        // "start maximized" request from the shell over the saved show state.
+        if (nCmdShow == SW_SHOWMAXIMIZED) wpsetting.showCmd = SW_SHOWMAXIMIZED;
+        wpsetting.flags = 0;
         SetWindowPlacement(&wpsetting);
+    }
+    else
+    {
+        // No saved placement yet: show using the shell-requested state.
+        ShowWindow(nCmdShow);
     }
 
     SetTimer(ID_WDS_CONTROL, 25, nullptr);
@@ -1085,23 +1038,36 @@ void CMainFrame::OnTimer(const UINT_PTR nIDEvent)
     // UI updates that do need to processed frequently
     if (!CWinDirStatModel::Get()->IsRootDone() && !IsScanSuspended())
     {
-        // Update the visual progress at the bottom of the screen
+        // Update the visual progress at the bottom of the screen. This is cheap
+        // and drives the progress-bar animation, so do it on every tick.
         UpdateProgress();
 
-        // By sorting items, items will be redrawn which will
-        // also force pacman to update with recent position
-        CFileTreeControl::Get()->SortItems();
-
-        // Conditionally sort duplicates
-        if (COptions::ScanForDuplicates && doInfrequentUpdate && GetFileTabbedView()->IsFileDupeViewTabActive())
+        // Re-sorting the list controls is expensive: SortItems() runs a full
+        // stable_sort over the entire visible list and rebuilds a hash map, all
+        // on the UI thread. Doing this on every 25 ms tick saturates the UI
+        // thread during a large scan, making the window sluggish and slow to
+        // close. Throttle it to a fixed wall-clock interval instead — the live
+        // values still refresh a couple of times per second, which is plenty.
+        static ULONGLONG lastListSort = 0;
+        if (const ULONGLONG now = GetTickCount64();
+            now - lastListSort >= LIST_SORT_INTERVAL_MS)
         {
-            CFileDupeControl::Get()->SortItems();
-        }
+            lastListSort = now;
 
-        // Conditionally sort largest files
-        if (doInfrequentUpdate && GetFileTabbedView()->IsFileTopViewTabActive())
-        {
-            CFileTopControl::Get()->SortItems();
+            // Sorting the items also forces them to be redrawn with fresh values.
+            CFileTreeControl::Get()->SortItems();
+
+            // Conditionally sort duplicates
+            if (COptions::ScanForDuplicates && GetFileTabbedView()->IsFileDupeViewTabActive())
+            {
+                CFileDupeControl::Get()->SortItems();
+            }
+
+            // Conditionally sort largest files
+            if (GetFileTabbedView()->IsFileTopViewTabActive())
+            {
+                CFileTopControl::Get()->SortItems();
+            }
         }
     }
 
