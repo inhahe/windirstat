@@ -41,6 +41,7 @@ namespace
         UINT id = 0;
         std::wstring text;
         Painter painter; // optional; when set a 16px + 32px icon is generated
+        bool large = false; // when true, rendered as a prominent 32px "hero" button
     };
 
     struct RibbonPanel
@@ -75,14 +76,14 @@ void CMainFrame::CreateRibbon()
     categories.push_back({ L(IDS_MENU_FILE),
     {
         { L(IDS_RIB_SCAN), {
-            { ID_FILE_SELECT, L(IDS_MENU_SELECT), Icons::PaintFileSelect } } },
+            { ID_FILE_SELECT, L(IDS_MENU_SELECT), Icons::PaintFileSelect, true } } },
         { L(IDS_RIB_RESULTS), {
             { ID_LOAD_RESULTS, L(IDS_MENU_LOAD_RESULTS), {} },
             { ID_SAVE_RESULTS, L(IDS_MENU_SAVE_RESULTS), {} },
             { ID_SAVE_DUPLICATES, L(IDS_MENU_SAVE_DUPLICATES), {} },
             { ID_SAVE_PERMISSIONS, L(IDS_MENU_SAVE_PERMISSIONS), {} } } },
         { L(IDS_RIB_REFRESH), {
-            { ID_REFRESH_ALL, L(IDS_MENU_REFRESH_ALL), refreshAll },
+            { ID_REFRESH_ALL, L(IDS_MENU_REFRESH_ALL), refreshAll, true },
             { ID_REFRESH_SELECTED, L(IDS_MENU_REFRESH_SELECTED), Icons::PaintRefreshSelected } } },
         { L(IDS_RIB_APP), {
             { ID_RUN_ELEVATED, L(IDS_MENU_ELEVATED), {} },
@@ -93,10 +94,10 @@ void CMainFrame::CreateRibbon()
     categories.push_back({ L(IDS_MENU_EDIT),
     {
         { L(IDS_RIB_CLIPBOARD), {
-            { ID_EDIT_COPY_CLIPBOARD, L(IDS_MENU_COPY_CLIPBOARD), Icons::PaintEditCopyClipboard } } },
+            { ID_EDIT_COPY_CLIPBOARD, L(IDS_MENU_COPY_CLIPBOARD), Icons::PaintEditCopyClipboard, true } } },
         { L(IDS_RIB_FIND), {
-            { ID_SEARCH, L(IDS_MENU_SEARCH), search },
-            { ID_FILTER_EXCLUDE_ITEM, L(IDS_MENU_EXCLUDE_ITEM), {} } } },
+            { ID_SEARCH, L(IDS_MENU_SEARCH), search, true },
+            { ID_FILTER_EXCLUDE_ITEM, L(IDS_MENU_EXCLUDE_ITEM), [](Gdiplus::Graphics& g) { Icons::PaintFilter(g); } } } },
         { L(IDS_RIB_HASH), {
             { ID_COMPUTE_HASH, L(IDS_COMPUTE_HASH), {} } } },
     } });
@@ -105,13 +106,13 @@ void CMainFrame::CreateRibbon()
     RibbonCategory cleanup{ L(IDS_MENU_CLEANUP),
     {
         { L(IDS_RIB_OPEN), {
-            { ID_CLEANUP_OPEN_SELECTED, L(IDS_MENU_OPEN), Icons::PaintOpenSelected },
+            { ID_CLEANUP_OPEN_SELECTED, L(IDS_MENU_OPEN), Icons::PaintOpenSelected, true },
             { ID_CLEANUP_EXPLORER_SELECT, L(IDS_MENU_EXPLORER_SELECT), Icons::PaintExplorerSelect },
             { ID_CLEANUP_OPEN_IN_CONSOLE, L(IDS_MENU_CONSOLE), Icons::PaintOpenInConsole },
             { ID_CLEANUP_OPEN_IN_PWSH, L(IDS_MENU_PWSH), {} },
             { ID_CLEANUP_PROPERTIES, L(IDS_MENU_PROPERTIES), Icons::PaintProperties } } },
         { L(IDS_RIB_DELETE), {
-            { ID_CLEANUP_DELETE, L(IDS_MENU_DELETE), Icons::PaintDelete },
+            { ID_CLEANUP_DELETE, L(IDS_MENU_DELETE), Icons::PaintDelete, true },
             { ID_CLEANUP_DELETE_BIN, L(IDS_MENU_DELETE_BIN), Icons::PaintDeleteBin },
             { ID_CLEANUP_EMPTY_BIN, L(IDS_MENU_EMPTY_BIN), {} },
             { ID_CLEANUP_EMPTY_FOLDER, L(IDS_MENU_EMPTY_FOLDER), {} },
@@ -165,7 +166,7 @@ void CMainFrame::CreateRibbon()
             { ID_TREEMAP_SHOW_EXTENSIONS, L(IDS_MENU_TREEMAP_SHOW_EXTENSIONS), {} },
             { ID_TREEMAP_SHOW_FOLDER_FRAMES, L(IDS_MENU_TREEMAP_SHOW_FOLDER_FRAMES), {} } } },
         { L(IDS_RIB_ZOOM), {
-            { ID_TREEMAP_ZOOMIN, L(IDS_MENU_ZOOMIN), zoomIn },
+            { ID_TREEMAP_ZOOMIN, L(IDS_MENU_ZOOMIN), zoomIn, true },
             { ID_TREEMAP_ZOOMOUT, L(IDS_MENU_ZOOMOUT), zoomOut },
             { ID_TREEMAP_ZOOMRESET, L(IDS_MENU_ZOOMRESET), {} },
             { ID_TREEMAP_RESELECT_CHILD, L(IDS_MENU_RESELECT_CHILD), {} },
@@ -217,15 +218,15 @@ void CMainFrame::CreateRibbon()
             { ID_VIEW_STATUS_BAR, L(IDS_MENU_STATUS_BAR), {} },
             { ID_VIEW_RIBBON, L(IDS_MENU_RIBBON), {} } } },
         { L(IDS_RIB_SETTINGS), {
-            { ID_CONFIGURE, L(IDS_MENU_SETTINGS), Icons::PaintGear },
-            { ID_VIEW_WINDOW_LAYOUT, L(IDS_WINDOW_LAYOUT), Icons::PaintWindowLayout } } },
+            { ID_CONFIGURE, L(IDS_MENU_SETTINGS), Icons::PaintGear, true },
+            { ID_VIEW_WINDOW_LAYOUT, L(IDS_WINDOW_LAYOUT), Icons::PaintWindowLayout, true } } },
     } });
 
     // ---- Help ----
     categories.push_back({ L(IDS_MENU_HELP),
     {
         { L(IDS_RIB_HELP), {
-            { ID_HELP_MANUAL, L(IDS_MENU_HELP), Icons::PaintHelp },
+            { ID_HELP_MANUAL, L(IDS_MENU_HELP), Icons::PaintHelp, true },
             { ID_HELP_REPORTBUG, L(IDS_MENU_HELP_REPORT), {} },
             { ID_APP_ABOUT, L(IDS_MENU_HELP_ABOUT), {} } } },
     } });
@@ -266,8 +267,19 @@ void CMainFrame::CreateRibbon()
                     largeIndex = largeImages.AddImage(bmpLarge, TRUE);
                 }
 
-                panel->Add(new CMFCRibbonButton(button.id, button.text.c_str(),
-                    smallIndex, largeIndex));
+                auto* ribbonButton = new CMFCRibbonButton(button.id, button.text.c_str(),
+                    smallIndex, largeIndex);
+
+                // Promote flagged commands to prominent 32px "hero" buttons. This is
+                // what gives the ribbon its Office-style visual hierarchy (one or two
+                // large buttons per group with the remaining commands stacked small)
+                // instead of a flat, uniform row of identical buttons.
+                if (button.large && largeIndex != -1)
+                {
+                    ribbonButton->SetAlwaysLargeImage();
+                }
+
+                panel->Add(ribbonButton);
             }
         }
     }
