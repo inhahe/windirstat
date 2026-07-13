@@ -20,6 +20,7 @@
 #include "Filtering.h"
 #include "FinderBasic.h"
 #include "FinderNtfs.h"
+#include "HelpersInterface.h"
 
 // --- Construction / Destruction ---
 
@@ -295,6 +296,18 @@ CItem* CItem::AddFile(const Finder& finder)
     AddChild(child);
     child->SetDone();
     return child;
+}
+
+void CItem::ReconcileFromFinder(const Finder& finder)
+{
+    // Update a placeholder directory (created early by a basic enumeration so the
+    // drive expands immediately) with authoritative metadata from the finder that
+    // actually scans it, so no duplicate item is created for the same directory.
+    SetIndex(finder.GetIndex());
+    SetLastChange(finder.GetLastWriteTime());
+    SetAttributes(finder.GetAttributes());
+    SetReparseTag(finder.GetReparseTag());
+    if (finder.IsReserved()) SetFlag(ITF_RESERVED);
 }
 
 // --- Size & Stats ---
@@ -981,9 +994,40 @@ void CItem::ScanItems(BlockingQueue<CItem*> * queue, FinderNtfsContext& contextN
         }
 
         // Try to load NTFS MFT
+        std::unordered_map<std::wstring, CItem*> prepopulated;
         if (item->IsTypeOrFlag(IT_DRIVE) && COptions::UseFastScanEngine)
         {
-            contextNtfs.LoadRoot(item);
+            // Reading the entire MFT (LoadRoot) can take several seconds on a large
+            // volume, during which the freshly-inserted, expanded drive node would
+            // otherwise appear empty until the scan is well underway. To make the
+            // selected drive expand immediately, enumerate its top-level (plain)
+            // directories now with the basic finder and insert them right away. The
+            // MFT pass below reconciles each placeholder (assigning the authoritative
+            // record index/attributes and queueing it for scanning) instead of
+            // creating a duplicate item for the same directory.
+            if (item->IsVisible() && item->IsExpanded())
+            {
+                for (BOOL b = finderBasic.FindFile(item); b; b = finderBasic.FindNext())
+                {
+                    if (queue->IsCancelled()) break;
+
+                    // Only pre-create plain directories; reparse points and files are
+                    // left for the authoritative pass to avoid follow/size reconciliation.
+                    if (!finderBasic.IsDirectory() ||
+                        (finderBasic.GetAttributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0) continue;
+                    if (COptions::ExcludeHiddenDirectory && finderBasic.IsHidden() ||
+                        COptions::ExcludeProtectedDirectory && finderBasic.IsHiddenSystem() ||
+                        CFiltering::IsFilteredOut(finderBasic.GetFilePath()))
+                    {
+                        continue;
+                    }
+
+                    CItem* newitem = item->AddDirectory(finderBasic);
+                    prepopulated.emplace(MakeLower(finderBasic.GetFileName()), newitem);
+                }
+            }
+
+            contextNtfs.LoadRoot(item, [queue] { return queue->IsCancelled(); });
         }
 
         if (item->IsTypeOrFlag(IT_DRIVE, IT_DIRECTORY))
@@ -993,6 +1037,15 @@ void CItem::ScanItems(BlockingQueue<CItem*> * queue, FinderNtfsContext& contextN
 
             for (BOOL b = finder->FindFile(item); b; b = finder->FindNext())
             {
+                // Cooperative suspend/cancel checkpoint hit for every entry
+                // (directories and files) so a pause or shutdown is honoured
+                // promptly even while enumerating a huge directory. WaitIfSuspended
+                // throws to unwind the task when the queue is cancelled while paused;
+                // the explicit IsCancelled() check covers cancellation without a
+                // preceding suspend (e.g. app shutdown).
+                queue->WaitIfSuspended();
+                if (queue->IsCancelled()) break;
+
                 if (finder->IsDirectory())
                 {
                     if (COptions::ExcludeHiddenDirectory && finder->IsHidden() ||
@@ -1003,7 +1056,23 @@ void CItem::ScanItems(BlockingQueue<CItem*> * queue, FinderNtfsContext& contextN
                     }
 
                     item->UpwardAddFolders(1);
-                    if (CItem* newitem = item->AddDirectory(*finder); newitem->GetReadJobs() > 0)
+
+                    // Reuse a placeholder created during early prepopulation (see above)
+                    // if one exists for this directory; otherwise create it now.
+                    CItem* newitem;
+                    if (!prepopulated.empty())
+                    {
+                        if (const auto it = prepopulated.find(MakeLower(finder->GetFileName())); it != prepopulated.end())
+                        {
+                            newitem = it->second;
+                            newitem->ReconcileFromFinder(*finder);
+                            prepopulated.erase(it);
+                        }
+                        else newitem = item->AddDirectory(*finder);
+                    }
+                    else newitem = item->AddDirectory(*finder);
+
+                    if (newitem->GetReadJobs() > 0)
                     {
                         queue->Push(newitem);
                     }
@@ -1023,11 +1092,20 @@ void CItem::ScanItems(BlockingQueue<CItem*> * queue, FinderNtfsContext& contextN
                     CItem* newitem = item->AddFile(*finder);
                     CFileDupeControl::Get()->ProcessDuplicate(newitem, queue);
                     CFileTopControl::Get()->ProcessTop(newitem);
-                    queue->WaitIfSuspended();
                 }
 
                 // Update pacman position
                 item->UpwardDrivePacman();
+            }
+
+            // Any prepopulated placeholders the authoritative pass did not encounter
+            // (e.g. absent from the MFT view or filtered differently) are scanned with
+            // the basic finder as a fallback so they are neither left empty nor leave
+            // dangling read jobs that would prevent the scan from ever completing.
+            for (const auto& leftover : prepopulated | std::views::values)
+            {
+                leftover->SetFlag(ITF_BASIC);
+                if (leftover->GetReadJobs() > 0) queue->Push(leftover);
             }
         }
         else if (item->IsTypeOrFlag(IT_FILE))
