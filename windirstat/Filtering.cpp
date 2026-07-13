@@ -204,8 +204,9 @@ void CFiltering::CompileFilters()
                    SizeMinimumCalculated != 0  ||
                    std::bit_cast<ULONGLONG>(MaxAgeFileTimeCutoff) != 0;
 
-    // Rebuild toolbar to reflect status
-    CMainFrame::Get()->RebuildToolBar();
+    // Rebuild toolbar to reflect status (skip if the main frame isn't up yet,
+    // e.g. during initial settings load before the frame has been created).
+    if (CMainFrame* frame = CMainFrame::Get()) frame->RebuildToolBar();
 }
 
 std::wstring_view CFiltering::WithoutTrailingBackslashes(std::wstring_view path)
