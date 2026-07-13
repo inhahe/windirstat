@@ -3,6 +3,7 @@
 
 Enhancements
 - Improved ribbon appearance with large "hero" buttons, check boxes for toggle options, and additional icons
+- Grouped the Clean Up tab's compression, profile removal, and DISM commands into drop-down buttons to reduce ribbon width
 - Modernized the dark-mode ribbon with flat styling, an accent-underlined active tab, and readable panel captions
 - Added icons to nearly all ribbon commands and adopted the modern Windows 7 visual style in light mode
 - Added additional window layouts

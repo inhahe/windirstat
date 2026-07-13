@@ -303,6 +303,7 @@ constexpr std::wstring_view IDS_RIB_INTERFACE = L"IDS_RIB_INTERFACE";
 constexpr std::wstring_view IDS_RIB_MODIFY = L"IDS_RIB_MODIFY";
 constexpr std::wstring_view IDS_RIB_OPEN = L"IDS_RIB_OPEN";
 constexpr std::wstring_view IDS_RIB_REFRESH = L"IDS_RIB_REFRESH";
+constexpr std::wstring_view IDS_RIB_REMOVE = L"IDS_RIB_REMOVE";
 constexpr std::wstring_view IDS_RIB_RESULTS = L"IDS_RIB_RESULTS";
 constexpr std::wstring_view IDS_RIB_SCAN = L"IDS_RIB_SCAN";
 constexpr std::wstring_view IDS_RIB_SETTINGS = L"IDS_RIB_SETTINGS";

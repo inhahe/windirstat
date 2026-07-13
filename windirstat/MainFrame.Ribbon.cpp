@@ -43,6 +43,7 @@ namespace
         Painter painter; // optional; when set a 16px + 32px icon is generated
         bool large = false; // when true, rendered as a prominent 32px "hero" button
         bool checkbox = false; // when true, rendered as a ribbon check box that reflects on/off state
+        std::vector<RibbonButton> subItems; // when non-empty, rendered as a drop-down menu button
     };
 
     struct RibbonPanel
@@ -167,12 +168,15 @@ void CMainFrame::CreateRibbon()
             { ID_CLEANUP_EMPTY_FOLDER, L(IDS_MENU_EMPTY_FOLDER), ic(L'∅') },
             { ID_CLEANUP_MOVE_TO, L(IDS_MENU_MOVE_TO), moveIcon } } },
         { L(IDS_RIB_COMPRESS), {
-            { ID_COMPRESS_NONE, L(IDS_MENU_COMPRESS_NONE), ic(L'⊖') },
-            { ID_COMPRESS_LZNT1, L(IDS_MENU_COMPRESS_LZNT1), ic(L'⇲') },
-            { ID_COMPRESS_XPRESS4K, L(IDS_MENU_COMPRESS_XPRESS4K), ic(L'⇲') },
-            { ID_COMPRESS_XPRESS8K, L(IDS_MENU_COMPRESS_XPRESS8K), ic(L'⇲') },
-            { ID_COMPRESS_XPRESS16K, L(IDS_MENU_COMPRESS_XPRESS16K), ic(L'⇲') },
-            { ID_COMPRESS_LZX, L(IDS_MENU_COMPRESS_LZX), ic(L'⇲') } } },
+            // The six compression levels collapse into a single "Compress" drop-down
+            // (a prominent hero button) so the panel needs one column instead of two.
+            { 0, L(IDS_RIB_COMPRESS), ic(L'⇲'), true, false, {
+                { ID_COMPRESS_NONE, L(IDS_MENU_COMPRESS_NONE), ic(L'⊖') },
+                { ID_COMPRESS_LZNT1, L(IDS_MENU_COMPRESS_LZNT1), ic(L'⇲') },
+                { ID_COMPRESS_XPRESS4K, L(IDS_MENU_COMPRESS_XPRESS4K), ic(L'⇲') },
+                { ID_COMPRESS_XPRESS8K, L(IDS_MENU_COMPRESS_XPRESS8K), ic(L'⇲') },
+                { ID_COMPRESS_XPRESS16K, L(IDS_MENU_COMPRESS_XPRESS16K), ic(L'⇲') },
+                { ID_COMPRESS_LZX, L(IDS_MENU_COMPRESS_LZX), ic(L'⇲') } } } } },
         { L(IDS_RIB_ADVANCED), {
             { ID_CLEANUP_SPARSIFY_FILE, L(IDS_MENU_SPARSIFY_FILE), ic(L'✂') },
             { ID_CLEANUP_OPTIMIZE_VHD, L(IDS_MENU_OPTIMIZE_VHD), ic(L'⟳') },
@@ -182,13 +186,17 @@ void CMainFrame::CreateRibbon()
             { ID_CLEANUP_HIBERNATE, L(IDS_MENU_DISABLE_HIBERNATE), ic(L'☾') },
             { ID_CLEANUP_DISK_CLEANUP, L(IDS_MENU_DISK_CLEANUP), ic(L'⊛') },
             { ID_CLEANUP_STORAGE_SENSE, L(IDS_MENU_STORAGE_SENSE), ic(L'◷') },
-            { ID_CLEANUP_REMOVE_PROGRAMS, L(IDS_MENU_REMOVE_PROGRAMS), ic(L'⊖') },
-            { ID_CLEANUP_REMOVE_ROAMING, L(IDS_MENU_REMOVE_ROAMING), ic(L'⊖') },
-            { ID_CLEANUP_REMOVE_LOCAL, L(IDS_MENU_REMOVE_LOCAL), ic(L'⊖') },
-            { ID_CLEANUP_REMOVE_SHADOW, L(IDS_MENU_REMOVE_SHADOW), ic(L'⊖') },
-            { ID_CLEANUP_DISM_ANALYZE, L"/AnalyzeComponentStore", ic(L'⚙') },
-            { ID_CLEANUP_DISM_NORMAL, L"/StartComponentCleanup", ic(L'⚙') },
-            { ID_CLEANUP_DISM_RESET, L"/StartComponentCleanup /ResetBase", ic(L'⚙') } } },
+            { ID_CLEANUP_REMOVE_PROGRAMS, L(IDS_MENU_REMOVE_PROGRAMS), ic(L'⊞') },
+            // Profile / shadow-copy removals collapse into a single "Remove" drop-down.
+            { 0, L(IDS_RIB_REMOVE), ic(L'⊖'), false, false, {
+                { ID_CLEANUP_REMOVE_ROAMING, L(IDS_MENU_REMOVE_ROAMING), ic(L'⊖') },
+                { ID_CLEANUP_REMOVE_LOCAL, L(IDS_MENU_REMOVE_LOCAL), ic(L'⊖') },
+                { ID_CLEANUP_REMOVE_SHADOW, L(IDS_MENU_REMOVE_SHADOW), ic(L'⊖') } } },
+            // The three DISM component-store actions collapse into one drop-down.
+            { 0, L(IDS_MENU_DISM), ic(L'⚙'), false, false, {
+                { ID_CLEANUP_DISM_ANALYZE, L"/AnalyzeComponentStore", ic(L'⚙') },
+                { ID_CLEANUP_DISM_NORMAL, L"/StartComponentCleanup", ic(L'⚙') },
+                { ID_CLEANUP_DISM_RESET, L"/StartComponentCleanup /ResetBase", ic(L'⚙') } } } } },
     } };
 
     // User-defined cleanups (dynamic, only the enabled ones)
@@ -296,6 +304,26 @@ void CMainFrame::CreateRibbon()
         smallImages.SetImageSize(CSize(16, 16));
         largeImages.SetImageSize(CSize(32, 32));
 
+        // Builds a CMFCRibbonButton, registering its 16px/32px icons in the category
+        // image lists. Shared by top-level buttons and drop-down sub-items so both get
+        // artwork the same way.
+        auto buildButton = [&](const RibbonButton& button)
+        {
+            int smallIndex = -1;
+            int largeIndex = -1;
+            if (button.painter)
+            {
+                CBitmap bmpSmall;
+                bmpSmall.Attach(Icons::MakeBitmap(16, button.painter));
+                smallIndex = smallImages.AddImage(bmpSmall, TRUE);
+
+                CBitmap bmpLarge;
+                bmpLarge.Attach(Icons::MakeBitmap(32, button.painter));
+                largeIndex = largeImages.AddImage(bmpLarge, TRUE);
+            }
+            return new CMFCRibbonButton(button.id, button.text.c_str(), smallIndex, largeIndex);
+        };
+
         for (auto& panelDef : category.panels)
         {
             if (panelDef.buttons.empty()) continue;
@@ -303,19 +331,6 @@ void CMainFrame::CreateRibbon()
 
             for (auto& button : panelDef.buttons)
             {
-                int smallIndex = -1;
-                int largeIndex = -1;
-                if (button.painter)
-                {
-                    CBitmap bmpSmall;
-                    bmpSmall.Attach(Icons::MakeBitmap(16, button.painter));
-                    smallIndex = smallImages.AddImage(bmpSmall, TRUE);
-
-                    CBitmap bmpLarge;
-                    bmpLarge.Attach(Icons::MakeBitmap(32, button.painter));
-                    largeIndex = largeImages.AddImage(bmpLarge, TRUE);
-                }
-
                 // Boolean options render as ribbon check boxes so their on/off state
                 // is visible directly in the ribbon (driven by the existing
                 // ON_UPDATE_COMMAND_UI SetCheck handlers), instead of as plain buttons
@@ -326,14 +341,25 @@ void CMainFrame::CreateRibbon()
                     continue;
                 }
 
-                auto* ribbonButton = new CMFCRibbonButton(button.id, button.text.c_str(),
-                    smallIndex, largeIndex);
+                CMFCRibbonButton* ribbonButton = buildButton(button);
+
+                // A button with sub-items becomes a drop-down (menu) button: several
+                // related commands collapse behind one button whose popup lists them,
+                // using vertical space to keep the ribbon narrow. The parent carries
+                // id 0, so MFC keeps it enabled purely to open its menu.
+                if (!button.subItems.empty())
+                {
+                    for (const auto& sub : button.subItems)
+                    {
+                        ribbonButton->AddSubItem(buildButton(sub));
+                    }
+                }
 
                 // Promote flagged commands to prominent 32px "hero" buttons. This is
                 // what gives the ribbon its Office-style visual hierarchy (one or two
                 // large buttons per group with the remaining commands stacked small)
                 // instead of a flat, uniform row of identical buttons.
-                if (button.large && largeIndex != -1)
+                if (button.large && button.painter)
                 {
                     ribbonButton->SetAlwaysLargeImage();
                 }
