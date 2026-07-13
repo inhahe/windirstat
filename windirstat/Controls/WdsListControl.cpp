@@ -19,6 +19,7 @@
 #include "TreeMap.h"
 #include "WdsListControl.h"
 #include "DrawTextCache.h"
+#include "Options.h"
 
 namespace
 {
@@ -851,6 +852,7 @@ BEGIN_MESSAGE_MAP(CWdsListControl, CListCtrl)
     ON_NOTIFY(NM_CUSTOMDRAW, 0, OnCustomDraw)
     ON_NOTIFY_REFLECT(LVN_GETDISPINFO, OnLvnGetDispInfo)
     ON_WM_DESTROY()
+    ON_WM_SIZE()
     ON_WM_ERASEBKGND()
     ON_WM_SHOWWINDOW()
     ON_MESSAGE(WM_SETFONT, OnSetFont)
@@ -931,6 +933,82 @@ void CWdsListControl::OnHdnDividerdblclick(NMHDR* pNMHDR, LRESULT* pResult)
     constexpr int padding = 3;
     SetColumnWidth(column, width + padding);
     *pResult = FALSE;
+}
+
+void CWdsListControl::AutoSizeColumns()
+{
+    if (!COptions::AutomaticallyResizeColumns || m_columnCount <= 0 || !::IsWindow(m_hWnd)) return;
+
+    const CSetRedrawLock lock(this);
+    CClientDC dc(this);
+    CSelectObject sofont(&dc, GetFont());
+
+    constexpr int padding = 3;
+    const int rows = GetItemCount();
+
+    // Fit every column to the wider of its header text and its widest displayed cell.
+    // Only the currently-inserted (visible/expanded) rows are measured, which is bounded
+    // regardless of how large the underlying tree is. Mirrors OnHdnDividerdblclick.
+    for (const int col : std::views::iota(0, m_columnCount))
+    {
+        const int subitem = ColumnToSubItem(col);
+
+        // Isolate the header autosize from the whole-control width with a temporary
+        // trailing column.
+        const int falseColumn = InsertColumn(m_columnCount + 1, L"");
+        SetColumnWidth(col, LVSCW_AUTOSIZE_USEHEADER);
+        int width = GetColumnWidth(col);
+        DeleteColumn(falseColumn);
+
+        for (const int i : std::views::iota(0, rows))
+        {
+            width = std::max(width, GetSubItemWidth(GetItem(i), subitem, &dc));
+        }
+
+        SetColumnWidth(col, width + padding);
+
+        // Remember the name/path column's content width as the floor it may never shrink
+        // below when later stretched to fill the window.
+        if (subitem == 0) m_nameColumnMinWidth = width + padding;
+    }
+
+    // Give any remaining client width to the name/path column so the columns fill the
+    // window instead of leaving an empty gutter on the right.
+    FillWidthWithNameColumn();
+}
+
+void CWdsListControl::FillWidthWithNameColumn()
+{
+    if (!COptions::AutomaticallyResizeColumns || m_columnCount <= 0 || !::IsWindow(m_hWnd)) return;
+
+    // The first sub-item (name/path) is the stretchable column; locate its header index
+    // since columns may have been reordered, and sum the widths of the others.
+    int nameColumn = -1;
+    int othersWidth = 0;
+    for (const int col : std::views::iota(0, m_columnCount))
+    {
+        if (ColumnToSubItem(col) == 0) nameColumn = col;
+        else othersWidth += GetColumnWidth(col);
+    }
+    if (nameColumn < 0) return;
+
+    CRect client;
+    GetClientRect(&client);
+
+    // Grow the name column to consume the leftover width, but never shrink it below its
+    // content-based floor (below that a horizontal scrollbar appears instead).
+    const int target = std::max(m_nameColumnMinWidth, client.Width() - othersWidth);
+    if (target > 0 && target != GetColumnWidth(nameColumn)) SetColumnWidth(nameColumn, target);
+}
+
+void CWdsListControl::OnSize(const UINT nType, const int cx, const int cy)
+{
+    CListCtrl::OnSize(nType, cx, cy);
+
+    // Keep the name/path column stretched to fill the (new) client width so the columns
+    // always span the window. Only the name column is adjusted, so any custom widths the
+    // user set on the data columns are preserved.
+    FillWidthWithNameColumn();
 }
 
 void CWdsListControl::OnHdnItemchanging(NMHDR* /*pNMHDR*/, LRESULT* pResult)

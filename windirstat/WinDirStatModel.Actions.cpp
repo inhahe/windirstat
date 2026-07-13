@@ -1293,6 +1293,15 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
             CMainFrame::Get()->GetActiveGraphPane()->SuspendRecalculationDrawing(false);
             CMainFrame::Get()->UnlockWindowUpdate();
 
+            // Fit every column to the wider of its header and its widest populated cell,
+            // then stretch the name/path column to fill any remaining width. Done here,
+            // once the tree is populated, so columns that were too narrow for their data
+            // (e.g. long paths or large sizes) are sized to fit.
+            if (CFileTreeControl* tree = CFileTreeControl::Get(); tree != nullptr)
+            {
+                tree->AutoSizeColumns();
+            }
+
             // Restore pre-scan visual orientation
             for (const auto& item : visualInfo | std::views::keys)
             {

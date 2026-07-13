@@ -495,6 +495,24 @@ BOOL CDirStatApp::InitInstance()
     return TRUE;
 }
 
+int CDirStatApp::ExitInstance()
+{
+    // Let the framework finish its normal shutdown first so all persistent state is
+    // flushed: options, column widths and window placement are written by the frame's
+    // OnDestroy handler, toolbar/docking layout by CWinAppEx, and the duplicate-hash
+    // cache is saved at scan completion.
+    const int exitCode = CWinAppEx::ExitInstance();
+
+    // Then skip the costly teardown of large in-memory structures. A completed scan can
+    // hold millions of CItem objects (the whole directory tree is deleted recursively via
+    // CWinDirStatModel's destructor) plus the in-memory hash cache; freeing them one by
+    // one through the normal destructor chain at process exit can take several seconds and
+    // is pure wasted work when the address space is about to be reclaimed anyway. All data
+    // that must survive has already been persisted above, so hand the process back to the
+    // OS immediately instead of walking millions of destructors.
+    ExitProcess(static_cast<UINT>(exitCode));
+}
+
 BOOL CDirStatApp::IsIdleMessage(MSG* pMsg)
 {
     // Treat WM_TIMER as an idle message to prevent excessive OnIdle calls

@@ -144,6 +144,14 @@ public:
     BOOL DeleteItem(int i);
     BOOL DeleteAllItems();
 
+    // Column auto-sizing. AutoSizeColumns fits every column to the wider of its header
+    // and its widest currently-displayed cell, then stretches the name/path column to
+    // absorb any leftover client width. FillWidthWithNameColumn only re-stretches the
+    // name column (used on resize). Both are no-ops when disabled via
+    // COptions::AutomaticallyResizeColumns.
+    void AutoSizeColumns();
+    void FillWidthWithNameColumn();
+
     // Sorting functionality
     const SSorting& GetSorting() const;
     int ColumnToSubItem(int col) const;
@@ -174,6 +182,7 @@ protected:
     COLORREF m_stripeColor = CLR_NONE; // The stripe color, used for every other item if m_showStripes
     int m_rowHeight = 20;              // Height of an item
     int m_columnCount = 0;
+    int m_nameColumnMinWidth = 0;      // Content-based floor for the stretchable name column
     bool m_showGrid = false;           // Whether to draw a grid
     bool m_showStripes = false;        // Whether to show stripes
     bool m_showFullRowSelect = false;  // Whether to draw full row selection
@@ -199,6 +208,7 @@ protected:
     afx_msg void OnHdnItemClick(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnHdnItemDblClick(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnDestroy();
+    afx_msg void OnSize(UINT nType, int cx, int cy);
     afx_msg virtual LRESULT OnSelectionChanged(WPARAM wParam, LPARAM lParam);
     afx_msg LRESULT OnSetFont(WPARAM wParam, LPARAM lParam);
 };
