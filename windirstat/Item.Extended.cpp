@@ -68,7 +68,6 @@ bool CItem::DrawSubItem(const int subitem, CDC* pdc, CRect rc, const UINT state,
     else
     {
         rc.DeflateRect(2, 4);
-        rc.left += GetIndent() * DpiRest(COptions::SizeProportionIndent);
         if (rc.Width() <= 0 || rc.Height() <= 0) return true;
 
         const bool dark = DarkMode::IsDarkModeActive();

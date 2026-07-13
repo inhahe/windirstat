@@ -8137,7 +8137,6 @@ namespace WdsSettingsTest
         IntField(out, first, "MinimizeViewThreshold", COptions::MinimizeViewThreshold.Obj());
         IntField(out, first, "ScanningThreads", COptions::ScanningThreads.Obj());
         IntField(out, first, "SelectDrivesRadio", COptions::SelectDrivesRadio.Obj());
-        IntField(out, first, "SizeProportionIndent", COptions::SizeProportionIndent.Obj());
         IntField(out, first, "FileTreeColorCount", COptions::FileTreeColorCount.Obj());
         IntField(out, first, "FilteringSizeMinimum", COptions::FilteringSizeMinimum.Obj());
         IntField(out, first, "FilteringSizeUnits", COptions::FilteringSizeUnits.Obj());
@@ -8379,7 +8378,6 @@ $visualSettings = @(
     'ShowTimeSpent',
     'ShowToolBar',
     'ShowTreeMap',
-    'SizeProportionIndent',
     'SubSplitterPos',
     'TopViewColumnOrder',
     'TopViewColumnWidths',

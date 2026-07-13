@@ -206,7 +206,6 @@ public:
     static Setting<int> MinimizeViewThreshold;
     static Setting<int> ScanningThreads;
     static Setting<int> SelectDrivesRadio;
-    static Setting<int> SizeProportionIndent;
     static Setting<int> FileTreeColorCount;
     static Setting<int> FilteringSizeMinimum;
     static Setting<int> FilteringSizeUnits;
