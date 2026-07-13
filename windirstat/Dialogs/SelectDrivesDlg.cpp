@@ -338,6 +338,7 @@ BEGIN_MESSAGE_MAP(CSelectDrivesDlg, CLayoutDialogEx)
     ON_REGISTERED_MESSAGE(WMU_THREADFINISHED, OnWmDriveInfoThreadFinished)
     ON_WM_CTLCOLOR()
     ON_WM_SYSCOLORCHANGE()
+    ON_WM_SIZE()
 END_MESSAGE_MAP()
 
 BOOL CSelectDrivesDlg::OnInitDialog()
@@ -372,7 +373,31 @@ BOOL CSelectDrivesDlg::OnInitDialog()
             Localization::Lookup(IDS_ELEVATION_REQUIRED)).c_str());
     }
 
-    m_layout.OnInitDialog(true);
+    // Restore the saved window size / position. The dialog template is quite
+    // small, so enforce a comfortably large minimum size (the layout engine
+    // stretches the child controls to fill it). A larger user-chosen size and
+    // position are still remembered; only sizes below the comfortable minimum
+    // are bumped up.
+    CRect templateRc;
+    GetWindowRect(templateRc); // current dialog = template (minimum) size
+    const int desiredW = MulDiv(templateRc.Width(), 3, 2);
+    const int desiredH = MulDiv(templateRc.Height(), 3, 2);
+
+    RECT& savedRect = COptions::DriveSelectWindowRect.Obj();
+    CRect rc(savedRect);
+    const bool firstRun = rc.IsRectEmpty();
+    if (firstRun)
+    {
+        rc = CRect(0, 0, desiredW, desiredH);
+    }
+    else
+    {
+        if (rc.Width()  < desiredW) rc.right  = rc.left + desiredW;
+        if (rc.Height() < desiredH) rc.bottom = rc.top  + desiredH;
+    }
+    savedRect = rc;
+
+    m_layout.OnInitDialog(firstRun); // center on first run, else restore saved position
 
     m_driveList.ShowGrid(COptions::ListGrid);
     m_driveList.ShowStripes(COptions::ListStripes);
@@ -386,6 +411,9 @@ BOOL CSelectDrivesDlg::OnInitDialog()
     m_driveList.InsertColumn(CHAR_MAX, Localization::Lookup(IDS_COL_USED_TOTAL).c_str(), LVCFMT_RIGHT, DpiRest(75), COL_DRIVES_PERCENT_USED);
 
     m_driveList.OnColumnsInserted();
+
+    // Stretch the columns to fill the (now sized) list control
+    ResizeDriveListColumns();
 
     // Add previously used folders to the combo box
     for (const auto& folder : COptions::SelectDrivesFolder.Obj())
@@ -642,6 +670,48 @@ void CSelectDrivesDlg::OnSysColorChange()
 {
     CLayoutDialogEx::OnSysColorChange();
     m_driveList.SysColorChanged();
+}
+
+void CSelectDrivesDlg::OnSize(const UINT nType, const int cx, const int cy)
+{
+    // Let the layout engine stretch the list control to the new dialog size first,
+    // then redistribute the columns so they always fill the list's full width.
+    CLayoutDialogEx::OnSize(nType, cx, cy);
+    ResizeDriveListColumns();
+}
+
+void CSelectDrivesDlg::ResizeDriveListColumns()
+{
+    if (m_driveList.GetSafeHwnd() == nullptr) return;
+    const CHeaderCtrl* header = m_driveList.GetHeaderCtrl();
+    if (header == nullptr) return;
+    const int numCols = header->GetItemCount();
+    if (numCols <= 0) return;
+
+    CRect rcClient;
+    m_driveList.GetClientRect(rcClient);
+    const int avail = rcClient.Width();
+    if (avail <= 0) return;
+
+    // Use the current column widths as weights so any user drag-resizing is
+    // preserved proportionally. The last column absorbs the rounding remainder
+    // so the columns fill the client width exactly (no horizontal scrollbar).
+    int total = 0;
+    std::vector<int> weights(numCols);
+    for (int i = 0; i < numCols; ++i)
+    {
+        weights[i] = std::max(1, m_driveList.GetColumnWidth(i));
+        total += weights[i];
+    }
+    if (total <= 0) return;
+
+    int used = 0;
+    for (int i = 0; i < numCols; ++i)
+    {
+        const int w = (i == numCols - 1) ? (avail - used) : MulDiv(avail, weights[i], total);
+        m_driveList.SetColumnWidth(i, std::max(0, w));
+        used += w;
+    }
 }
 
 void CSelectDrivesDlg::OnNMSetfocusTargetDrivesList(NMHDR*, LRESULT* pResult)

@@ -117,6 +117,7 @@ class CSelectDrivesDlg final : public CLayoutDialogEx
     void UpdateButtons();
     void UpdateFilterButton();
     void SetActiveRadio(int radio);
+    void ResizeDriveListColumns();
 
 protected:
 
@@ -153,4 +154,5 @@ protected:
     afx_msg BOOL PreTranslateMessage(MSG* pMsg) override;
     afx_msg void OnEditchangeBrowseFolder();
     afx_msg void OnCbnSelchangeBrowseFolder();
+    afx_msg void OnSize(UINT nType, int cx, int cy);
 };
