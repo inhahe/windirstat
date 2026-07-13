@@ -163,13 +163,15 @@ std::wstring FormatFileTime(const FILETIME& t, const bool seconds) noexcept
 
     const LCID lcid = COptions::GetLocaleForFormatting();
 
+    // Fixed, sortable layout: ISO-style year-month-day, a single space, then a
+    // 12-hour clock with an AM/PM suffix, e.g. "2026-04-19 09:47 PM".
     std::array<WCHAR, 64> date;
-    GetDateFormat(lcid, DATE_SHORTDATE, &st, nullptr, date.data(), std::ssize(date));
+    GetDateFormat(lcid, 0, &st, L"yyyy'-'MM'-'dd", date.data(), std::ssize(date));
 
     std::array<WCHAR, 64> time;
-    GetTimeFormat(lcid, seconds ? 0 : TIME_NOSECONDS, &st, nullptr, time.data(), std::ssize(time));
+    GetTimeFormat(lcid, 0, &st, seconds ? L"hh':'mm':'ss tt" : L"hh':'mm tt", time.data(), std::ssize(time));
 
-    return std::wstring(date.data()) + L"  " + time.data();
+    return std::wstring(date.data()) + L" " + time.data();
 }
 
 std::wstring FormatAttributes(const DWORD attr) noexcept
