@@ -36,6 +36,7 @@
 constexpr auto ID_STATUSPANE_IDLE_INDEX = 0;
 constexpr auto ID_STATUSPANE_SIZE_INDEX = 1;
 constexpr auto ID_STATUSPANE_RAM_INDEX = 2;
+constexpr auto ID_STATUSPANE_MODE_INDEX = 3;
 constexpr auto ID_INACTIVE_GRAPH_PANE = 0xEB00; // Outside MFC's control-bar and splitter-pane ID ranges.
 
 static void SetNativeMenuRadio(CCmdUI* command, const bool checked)
@@ -395,6 +396,49 @@ void CMainFrame::UpdatePaneText()
     SetStatusPaneText(dc, ID_STATUSPANE_SIZE_INDEX, (size == MAXULONGLONG) ? wds::strEmpty :
         std::format(L"{}: \u2211 {}", Localization::Lookup(COptions::TreeMapUseLogical ? IDS_COL_SIZE_LOGICAL : IDS_COL_SIZE_PHYSICAL), FormatBytes(size)), 175);
     SetStatusPaneText(dc, ID_STATUSPANE_RAM_INDEX, CDirStatApp::GetCurrentProcessMemoryInfo(), 175);
+
+    // Show scan mode (Normal vs Duplicates) — clickable to toggle
+    const std::wstring modeText = Localization::Lookup(
+        COptions::ScanForDuplicates ? IDS_SCAN_MODE_DUPLICATES : IDS_SCAN_MODE_NORMAL);
+    SetStatusPaneText(dc, ID_STATUSPANE_MODE_INDEX, modeText, 140);
+}
+
+// CWdsStatusBar — forwards clicks on the mode pane to CMainFrame::ToggleScanMode().
+BEGIN_MESSAGE_MAP(CWdsStatusBar, CMFCStatusBar)
+    ON_WM_LBUTTONDOWN()
+END_MESSAGE_MAP()
+
+void CWdsStatusBar::OnLButtonDown(const UINT nFlags, const CPoint point)
+{
+    // Check whether the click hit the mode pane
+    CRect rc;
+    GetItemRect(ID_STATUSPANE_MODE_INDEX, rc);
+    if (rc.PtInRect(point))
+    {
+        CMainFrame::Get()->ToggleScanMode();
+        return;
+    }
+    CMFCStatusBar::OnLButtonDown(nFlags, point);
+}
+
+void CMainFrame::ToggleScanMode()
+{
+    const bool wasDuplicates = COptions::ScanForDuplicates;
+    COptions::ScanForDuplicates = !wasDuplicates;
+
+    // Update the status bar immediately
+    UpdatePaneText();
+
+    // Show/hide the Duplicates tab according to the new mode
+    GetFileTabbedView()->SetDupeTabVisibility(
+        COptions::ScanForDuplicates && CWinDirStatModel::Get()->GetRootItem() != nullptr);
+
+    // If a scan is in progress or completed, restart it so the duplicate
+    // detection engine runs (or stops running) on every file.
+    if (CWinDirStatModel::Get()->GetRootItem() != nullptr)
+    {
+        CWinDirStatModel::Get()->StartScan(CWinDirStatModel::Get()->GetScanPathSpec());
+    }
 }
 
 void CMainFrame::OnUpdateEnableControl(CCmdUI* pCmdUI)

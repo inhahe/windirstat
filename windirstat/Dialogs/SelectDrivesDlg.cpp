@@ -562,8 +562,23 @@ void CSelectDrivesDlg::UpdateButtons()
     case RADIO_TARGET_FOLDER:
         if (!m_folderName.IsEmpty())
         {
-            enableOk = (m_folderName.GetLength() >= 2 && m_folderName.Left(2) == L"\\\\") ||
-                       FinderBasic::DoesFileExist(m_folderName.GetString());
+            if (m_folderName.GetLength() >= 2 && m_folderName.Left(2) == L"\\\\")
+            {
+                enableOk = true;
+            }
+            else
+            {
+                // Try the fast NT-level check first, then fall back to
+                // GetFileAttributes for paths that NtOpenFile can't handle
+                // (e.g. certain backup directories or reparse points).
+                enableOk = FinderBasic::DoesFileExist(m_folderName.GetString());
+                if (!enableOk)
+                {
+                    const DWORD attr = ::GetFileAttributes(m_folderName.GetString());
+                    enableOk = (attr != INVALID_FILE_ATTRIBUTES &&
+                               (attr & FILE_ATTRIBUTE_DIRECTORY) != 0);
+                }
+            }
         }
         break;
     default:

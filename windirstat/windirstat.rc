@@ -47,6 +47,7 @@ END
 STRINGTABLE
 BEGIN
     ID_INDICATOR_SIZE       "-"
+    ID_INDICATOR_MODE       "-"
 END
 
 #endif    // Neutral resources

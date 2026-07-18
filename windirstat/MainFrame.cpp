@@ -399,6 +399,7 @@ END_MESSAGE_MAP()
 constexpr auto ID_STATUSPANE_IDLE_INDEX = 0;
 constexpr auto ID_STATUSPANE_SIZE_INDEX = 1;
 constexpr auto ID_STATUSPANE_RAM_INDEX = 2;
+constexpr auto ID_STATUSPANE_MODE_INDEX = 3;
 
 CMainFrame::CMainFrame()
 {
@@ -628,7 +629,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
     // Setup status pane and force initial field population
     m_wndStatusBar.Create(this);
-    constexpr UINT indicators[]{ ID_INDICATOR_IDLE ,ID_INDICATOR_SIZE, ID_INDICATOR_RAM };
+    constexpr UINT indicators[]{ ID_INDICATOR_IDLE, ID_INDICATOR_SIZE, ID_INDICATOR_RAM, ID_INDICATOR_MODE };
     m_wndStatusBar.SetIndicators(indicators, _countof(indicators));
     m_wndStatusBar.SetPaneStyle(ID_STATUSPANE_IDLE_INDEX, SBPS_STRETCH);
     UpdatePaneText();

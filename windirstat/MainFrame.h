@@ -134,6 +134,16 @@ protected:
 };
 
 //
+// CWdsStatusBar. Status bar that forwards clicks on the mode pane
+// to CMainFrame so the user can toggle scan mode in-place.
+//
+class CWdsStatusBar final : public CMFCStatusBar
+{
+    DECLARE_MESSAGE_MAP()
+    afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+};
+
+//
 // CMainFrame. The main application window.
 //
 class CMainFrame final : public CFrameWndEx
@@ -217,7 +227,7 @@ protected:
     CWdsSplitterWnd m_splitter{ COptions::MainSplitterPos.Ptr() };    // Contains (a) m_wndSubSplitter and (b) the graph view.
     CLayoutPopup m_layoutPopup;                                        // Floating layout-picker popup
 
-    CMFCStatusBar m_wndStatusBar; // Status bar
+    CWdsStatusBar m_wndStatusBar; // Status bar
     CMFCToolBar m_wndToolBar;     // Toolbar
     CMFCRibbonBar m_wndRibbonBar; // Office-style ribbon; created instead of the toolbar/menu when COptions::UseRibbon
     CSize m_defaultButtonSize;    // Toolbar button size at creation (pre-SetSizes, DPI-scaled)
@@ -299,6 +309,7 @@ protected:
     afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 public:
     static CMainFrame* Get() { return s_Singleton; }
+    void ToggleScanMode();
     void UpdateFrameTitleForScan(LPCWSTR scanName);
     void UpdateAllPanes(CWnd* sender, MODEL_CHANGE change, CItem* item);
     void RebuildToolBar();
