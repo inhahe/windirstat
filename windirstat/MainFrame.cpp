@@ -724,8 +724,24 @@ void CMainFrame::InitialShowWindow(const int nCmdShow)
 
 void CMainFrame::InvokeInMessageThread(std::function<void()> callback) const
 {
-    if (CDirStatApp::Get()->m_nThreadID == GetCurrentThreadId()) callback();
-    else Get()->SendMessage(WM_CALLBACKUI, 0, reinterpret_cast<LPARAM>(&callback));
+    if (CDirStatApp::Get()->m_nThreadID == GetCurrentThreadId())
+    {
+        callback();
+    }
+    else
+    {
+        // Heap-allocate the callback so it outlives the posting thread's stack
+        // frame; OnCallbackRequest deletes it after execution. Using PostMessage
+        // instead of SendMessage avoids cross-thread SendMessage deadlocks: if a
+        // worker thread calls SendMessage while the UI thread is inside its own
+        // SendMessage (e.g. sorting a list control), neither thread can proceed.
+        auto* heapCallback = new std::function<void()>(std::move(callback));
+        if (!Get()->PostMessage(WM_CALLBACKUI, 0, reinterpret_cast<LPARAM>(heapCallback)))
+        {
+            // PostMessage failed (e.g. window destroyed during shutdown)
+            delete heapCallback;
+        }
+    }
 }
 
 void CMainFrame::OnClose()
@@ -740,6 +756,16 @@ void CMainFrame::OnClose()
 
     // Stop icon queue
     GetIconHandler()->StopAsyncShellInfoQueue();
+
+    // Drain any pending WM_CALLBACKUI messages that were posted by
+    // InvokeInMessageThread (PostMessage) but not yet processed. Each
+    // carries a heap-allocated std::function that would leak otherwise.
+    MSG msg;
+    while (::PeekMessage(&msg, m_hWnd, WM_CALLBACKUI, WM_CALLBACKUI, PM_REMOVE))
+    {
+        delete static_cast<std::function<void()>*>(
+            std::bit_cast<LPVOID>(msg.lParam));
+    }
 
     // It's too late, to do this in OnDestroy(). Because the toolbar, if undocked,
     // is already destroyed in OnDestroy(). So we must save the toolbar state here
@@ -1082,8 +1108,10 @@ void CMainFrame::OnTimer(const UINT_PTR nIDEvent)
 
 LRESULT CMainFrame::OnCallbackRequest(WPARAM, const LPARAM lParam)
 {
-    const auto & callback = *static_cast<std::function<void()>*>(std::bit_cast<LPVOID>(lParam));
-    callback();
+    // The callback was heap-allocated by InvokeInMessageThread; take ownership.
+    std::unique_ptr<std::function<void()>> callback(
+        static_cast<std::function<void()>*>(std::bit_cast<LPVOID>(lParam)));
+    (*callback)();
     return 0;
 }
 

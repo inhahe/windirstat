@@ -68,8 +68,10 @@ void CIconHandler::Initialize()
 
                 // Join the UI thread and see if the item still exists
                 // since it could have been deleted since originally
-                // requested
-                CMainFrame::Get()->InvokeInMessageThread([&]
+                // requested. Capture by value since InvokeInMessageThread
+                // uses async PostMessage from non-UI threads.
+                CMainFrame::Get()->InvokeInMessageThread(
+                    [item, control, icon, desc, iconTmp, descTmp = std::move(descTmp)]
                 {
                     const auto i = control->FindListItem(item);
                     if (i == -1 || !item->IsVisible()) return;

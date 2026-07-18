@@ -37,16 +37,23 @@ void CFileDupeControl::ProcessDuplicate(CItem* item, BlockingQueue<CItem*>* queu
     if (!COptions::ScanForDuplicates) return;
     if (item->IsTypeOrFlag(ITRP_CLOUD) && COptions::SkipDupeDetectionCloudLinks)
     {
-        // Show warning and skip
+        // Show warning on the UI thread (not here — calling DoModal from a
+        // worker thread with a UI-thread parent causes cross-thread SendMessage
+        // that can deadlock with the timer-driven list-control updates).
         if (m_showCloudWarningOnThisScan)
         {
             m_showCloudWarningOnThisScan = false;
-            if (const auto [nID, isChecked] = CMessageBoxDlg::Show(Localization::Lookup(IDS_DUPLICATES_WARNING),
-                Localization::Lookup(IDS_DONT_SHOW_AGAIN), false, MB_OK | MB_ICONINFORMATION, this);
-                nID == IDOK && isChecked)
+            CMainFrame::Get()->InvokeInMessageThread([this]
             {
-                COptions::ShowDupeDetectionCloudLinksWarning = false;
-            }
+                if (const auto [nID, isChecked] = CMessageBoxDlg::Show(
+                    Localization::Lookup(IDS_DUPLICATES_WARNING),
+                    Localization::Lookup(IDS_DONT_SHOW_AGAIN), false,
+                    MB_OK | MB_ICONINFORMATION, this);
+                    nID == IDOK && isChecked)
+                {
+                    COptions::ShowDupeDetectionCloudLinksWarning = false;
+                }
+            });
         }
 
         return;

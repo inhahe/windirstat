@@ -1282,8 +1282,10 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
             ExitProcess(SavePermissions(permsSavePath, ptrs) ? 0 : 1);
         }
 
-        // Invoke a UI thread to do updates
-        CMainFrame::Get()->InvokeInMessageThread([&]
+        // Invoke a UI thread to do updates. Capture visualInfo by move since
+        // InvokeInMessageThread uses async PostMessage from non-UI threads —
+        // the thread lambda's scope may be gone by the time the callback runs.
+        CMainFrame::Get()->InvokeInMessageThread([this, visualInfo = std::move(visualInfo)]
         {
             CMainFrame::Get()->LockWindowUpdate();
             Get()->NotifyPanes();
@@ -1303,12 +1305,12 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
             }
 
             // Restore pre-scan visual orientation
-            for (const auto& item : visualInfo | std::views::keys)
+            for (const auto& [item, info] : visualInfo)
             {
                 if (GetFocusControl()->FindTreeItem(item) == -1 || !item->IsVisible()) continue;
 
                 // Restore selection if previously set
-                if (visualInfo[item].isSelected) GetFocusControl()->SelectItem(item, false, true);
+                if (info.isSelected) GetFocusControl()->SelectItem(item, false, true);
             }
         });
 
