@@ -285,12 +285,23 @@ bool FinderNtfsContext::LoadRoot(CItem* driveitem, const std::function<bool()>& 
                 if (!fileRecord->IsValid() || !fileRecord->IsInUse()) continue;
                 const auto currentRecord = (mftRunOffset + bytesReadFromRun + offset) / volumeInfo.BytesPerFileRecordSegment;
                 const auto baseRecordIndex = fileRecord->BaseFileRecordNumber > 0 ? fileRecord->BaseFileRecordNumber : currentRecord;
-                FileRecordBase* baseRecordPtr = nullptr;
-                if (std::scoped_lock lock(m_baseFileRecordMutex); true)
-                {
-                    baseRecordPtr = &m_baseFileRecordMap[baseRecordIndex];
-                }
-                auto& baseRecord = *baseRecordPtr;
+                // Parse the record into a local staging copy first. m_baseFileRecordMap
+                // is a plain std::unordered_map shared by every worker thread of the
+                // std::execution::par loop, and a base record and its extension records
+                // can live in different MFT extents - i.e. be handled by different
+                // threads - yet resolve to the same baseRecordIndex. So the insertion
+                // and every write into the mapped FileRecordBase have to happen under
+                // m_baseFileRecordMutex. Holding it only across operator[] and then
+                // mutating the shared node, which is what this used to do, is a data
+                // race that corrupts the map; it was observed as an access violation
+                // inside operator[]/_Try_emplace. Staging keeps the locked region down
+                // to a handful of stores so the extents still parse in parallel.
+                FileRecordBase staged;
+                ULONG attributeMask = 0;   // Flags OR-ed in on top of whatever is stored
+                bool hasStandardInfo = false;
+                bool hasLogicalSize = false;
+                bool hasPhysicalSize = false;
+                bool hasReparseTag = false;
 
                 for (auto [curAttribute, endAttribute] = ATTRIBUTE_RECORD::bounds(fileRecord, volumeInfo.BytesPerFileRecordSegment); curAttribute <
                     endAttribute && curAttribute->TypeCode != AttributeEnd && curAttribute->RecordLength > 0; curAttribute = curAttribute->next())
@@ -299,10 +310,11 @@ bool FinderNtfsContext::LoadRoot(CItem* driveitem, const std::function<bool()>& 
                     {
                         if (curAttribute->IsNonResident()) continue;
                         const auto si = ByteOffset<STANDARD_INFORMATION>(curAttribute, curAttribute->Form.Resident.ValueOffset);
-                        baseRecord.LastModifiedTime = si->LastModificationTime;
-                        baseRecord.Attributes = si->FileAttributes;
-                        if (fileRecord->IsDirectory()) baseRecord.Attributes |= FILE_ATTRIBUTE_DIRECTORY;
-                        if (baseRecord.Attributes == 0) baseRecord.Attributes = FILE_ATTRIBUTE_NORMAL;
+                        staged.LastModifiedTime = si->LastModificationTime;
+                        staged.Attributes = si->FileAttributes;
+                        if (fileRecord->IsDirectory()) staged.Attributes |= FILE_ATTRIBUTE_DIRECTORY;
+                        if (staged.Attributes == 0) staged.Attributes = FILE_ATTRIBUTE_NORMAL;
+                        hasStandardInfo = true;
                     }
                     else if (curAttribute->TypeCode == AttributeFileName)
                     {
@@ -325,9 +337,10 @@ bool FinderNtfsContext::LoadRoot(CItem* driveitem, const std::function<bool()>& 
                             if (std::wstring_view(streamName, curAttribute->NameLength) == L"WofCompressedData" &&
                                 (!curAttribute->IsNonResident() || curAttribute->Form.Nonresident.LowestVcn == 0))
                             {
-                                baseRecord.PhysicalSize = curAttribute->IsNonResident() ?
+                                staged.PhysicalSize = curAttribute->IsNonResident() ?
                                     curAttribute->Form.Nonresident.AllocatedLength :
                                     (curAttribute->Form.Resident.ValueLength + 7) & ~7;
+                                hasPhysicalSize = true;
                             }
 
                             continue;
@@ -337,40 +350,70 @@ bool FinderNtfsContext::LoadRoot(CItem* driveitem, const std::function<bool()>& 
                         if (curAttribute->IsNonResident())
                         {
                             if (curAttribute->Form.Nonresident.LowestVcn != 0) continue;
-                            baseRecord.LogicalSize = curAttribute->Form.Nonresident.FileSize;
+                            staged.LogicalSize = curAttribute->Form.Nonresident.FileSize;
+                            hasLogicalSize = true;
 
                             if (const ULONGLONG physSize = (curAttribute->IsCompressed() || curAttribute->IsSparse()) ?
                                 curAttribute->Form.Nonresident.Compressed : curAttribute->Form.Nonresident.AllocatedLength; physSize > 0)
                             {
-                                baseRecord.PhysicalSize = physSize;
+                                staged.PhysicalSize = physSize;
+                                hasPhysicalSize = true;
                             }
                         }
                         else
                         {
-                            baseRecord.LogicalSize = curAttribute->Form.Resident.ValueLength;
-                            baseRecord.PhysicalSize = (curAttribute->Form.Resident.ValueLength + 7) & ~7;
+                            staged.LogicalSize = curAttribute->Form.Resident.ValueLength;
+                            staged.PhysicalSize = (curAttribute->Form.Resident.ValueLength + 7) & ~7;
+                            hasLogicalSize = true;
+                            hasPhysicalSize = true;
                         }
                     }
                     else if (curAttribute->TypeCode == AttributeReparsePoint)
                     {
                         if (curAttribute->IsNonResident()) continue;
                         const auto fn = ByteOffset<Finder::REPARSE_DATA_BUFFER>(curAttribute, curAttribute->Form.Resident.ValueOffset);
-                        baseRecord.ReparsePointTag = fn->ReparseTag;
+                        staged.ReparsePointTag = fn->ReparseTag;
+                        hasReparseTag = true;
 
-                        // Treat WOF files as compressed
+                        // Treat WOF files as compressed. This is OR-ed in at merge time
+                        // rather than assigned, because the standard-information
+                        // attribute that supplies the rest of the flags may have come
+                        // from a different record of the same base index.
                         if (fn->ReparseTag == IO_REPARSE_TAG_WOF)
                         {
-                            baseRecord.Attributes |= FILE_ATTRIBUTE_COMPRESSED;
+                            attributeMask |= FILE_ATTRIBUTE_COMPRESSED;
                         }
 
                         if (Finder::IsJunction(*fn))
                         {
-                            baseRecord.ReparsePointTag = IO_REPARSE_TAG_JUNCTION_POINT;
+                            staged.ReparsePointTag = IO_REPARSE_TAG_JUNCTION_POINT;
                         }
                     }
                 }
+
+                // Publish. The entry is created for every valid in-use record, even one
+                // that contributed no fields, because FinderNtfs::FindNext treats a
+                // missing entry as "skip this item".
+                {
+                    std::scoped_lock baseLock(m_baseFileRecordMutex);
+                    auto& baseRecord = m_baseFileRecordMap[baseRecordIndex];
+                    if (hasStandardInfo)
+                    {
+                        baseRecord.LastModifiedTime = staged.LastModifiedTime;
+                        baseRecord.Attributes = staged.Attributes;
+                    }
+                    baseRecord.Attributes |= attributeMask;
+                    if (hasLogicalSize) baseRecord.LogicalSize = staged.LogicalSize;
+                    if (hasPhysicalSize) baseRecord.PhysicalSize = staged.PhysicalSize;
+                    if (hasReparseTag) baseRecord.ReparsePointTag = staged.ReparsePointTag;
+                }
             }
         }
+
+        // std::for_each ignores the result, but the lambda has other paths that
+        // return bool (e.g. the cancellation check), so give every path a defined
+        // return value. Fixes C4715 (falling off the end of a value-returning body).
+        return true;
     });
 
     // Verify root node exists

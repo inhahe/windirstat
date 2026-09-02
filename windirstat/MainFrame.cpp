@@ -396,10 +396,12 @@ BEGIN_MESSAGE_MAP(CMainFrame, CFrameWndEx)
     ON_COMMAND(ID_VIEW_WINDOW_LAYOUT, &CMainFrame::OnViewWindowLayout)
 END_MESSAGE_MAP()
 
-constexpr auto ID_STATUSPANE_IDLE_INDEX = 0;
-constexpr auto ID_STATUSPANE_SIZE_INDEX = 1;
-constexpr auto ID_STATUSPANE_RAM_INDEX = 2;
-constexpr auto ID_STATUSPANE_MODE_INDEX = 3;
+// Scan-mode pane sits first (leftmost) so it is easy to spot; the idle pane
+// keeps the stretchy middle slot and size/ram trail on the right.
+constexpr auto ID_STATUSPANE_MODE_INDEX = 0;
+constexpr auto ID_STATUSPANE_IDLE_INDEX = 1;
+constexpr auto ID_STATUSPANE_SIZE_INDEX = 2;
+constexpr auto ID_STATUSPANE_RAM_INDEX = 3;
 
 CMainFrame::CMainFrame()
 {
@@ -627,11 +629,19 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
         return -1;
     }
 
-    // Setup status pane and force initial field population
+    // Setup status pane and force initial field population. (SetTipText below
+    // turns CBRS_TOOLTIPS on by itself, and CMFCStatusBar::OnCreate has already
+    // called EnableToolTips, so the pane tips work with the plain Create.)
     m_wndStatusBar.Create(this);
-    constexpr UINT indicators[]{ ID_INDICATOR_IDLE, ID_INDICATOR_SIZE, ID_INDICATOR_RAM, ID_INDICATOR_MODE };
+    constexpr UINT indicators[]{ ID_INDICATOR_MODE, ID_INDICATOR_IDLE, ID_INDICATOR_SIZE, ID_INDICATOR_RAM };
     m_wndStatusBar.SetIndicators(indicators, _countof(indicators));
     m_wndStatusBar.SetPaneStyle(ID_STATUSPANE_IDLE_INDEX, SBPS_STRETCH);
+
+    // The scan-mode pane is interactive: it paints as a framed drop-down chip
+    // with a chevron, lights up under the cursor and opens a menu when clicked.
+    m_wndStatusBar.SetDropDownPane(ID_INDICATOR_MODE);
+    m_wndStatusBar.SetTipText(ID_STATUSPANE_MODE_INDEX,
+        Localization::Lookup(IDS_SCAN_MODE_TIP).c_str());
     UpdatePaneText();
 
     // Setup status pane for dark mode

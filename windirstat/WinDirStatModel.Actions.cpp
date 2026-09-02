@@ -101,6 +101,7 @@ void CWinDirStatModel::OnUpdateCentralHandler(CCmdUI* pCmdUI)
         { ID_FILTER_EXCLUDE_ITEM,     { false, true,  false, LF_NONE,     ITF_ANY, isDriveOrDirOrFile } },
         { ID_INDICATOR_DISK,          { true,  true,  false, LF_NONE,     ITF_ANY } },
         { ID_INDICATOR_IDLE,          { true,  true,  true,  LF_NONE,     ITF_ANY } },
+        { ID_INDICATOR_MODE,          { true,  true,  true,  LF_NONE,     ITF_ANY } },
         { ID_INDICATOR_RAM,           { true,  true,  true,  LF_NONE,     ITF_ANY } },
         { ID_INDICATOR_SIZE,          { true,  true,  false, LF_NONE,     ITF_ANY } },
         { ID_POPUP_CANCEL,            { true,  true,  true,  LF_NONE,     ITF_ANY } },
@@ -224,6 +225,7 @@ BEGIN_MESSAGE_MAP(CWinDirStatModel, CCmdTarget)
     ON_UPDATE_COMMAND_UI(ID_INDICATOR_RAM, OnUpdateCentralHandler)
     ON_UPDATE_COMMAND_UI(ID_INDICATOR_DISK, OnUpdateCentralHandler)
     ON_UPDATE_COMMAND_UI(ID_INDICATOR_IDLE, OnUpdateCentralHandler)
+    ON_UPDATE_COMMAND_UI(ID_INDICATOR_MODE, OnUpdateCentralHandler)
     ON_UPDATE_COMMAND_UI(ID_INDICATOR_SIZE, OnUpdateCentralHandler)
     ON_UPDATE_COMMAND_UI(ID_CLEANUP_DISK_CLEANUP, OnUpdateCentralHandler)
     ON_COMMAND_RANGE(CONTENT_MENU_MINCMD, CONTENT_MENU_MAXCMD, OnContextMenuExplore)

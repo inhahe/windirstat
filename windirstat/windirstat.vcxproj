@@ -522,6 +522,7 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="Constants.h" />
     <ClInclude Include="BlockingQueue.h" />
     <ClInclude Include="CsvLoader.h" />
+    <ClInclude Include="HangDump.h" />
     <ClInclude Include="HashCache.h" />
     <ClInclude Include="UsnJournal.h" />
     <ClInclude Include="WinDirStatModel.h" />
@@ -569,6 +570,7 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClCompile Include="Controls\FlameGraph.cpp" />
     <ClCompile Include="Controls\XYSlider.cpp" />
     <ClCompile Include="CsvLoader.cpp" />
+    <ClCompile Include="HangDump.cpp" />
     <ClCompile Include="HashCache.cpp" />
     <ClCompile Include="UsnJournal.cpp" />
     <ClCompile Include="DarkMode.cpp" />

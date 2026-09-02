@@ -134,13 +134,50 @@ protected:
 };
 
 //
-// CWdsStatusBar. Status bar that forwards clicks on the mode pane
-// to CMainFrame so the user can toggle scan mode in-place.
+// CWdsStatusBar. Status bar with one interactive pane. The scan-mode pane is
+// painted as a drop-down "chip" - a framed box with a chevron that lights up
+// under the cursor and stays pressed while its menu is open - so it reads as a
+// control rather than as another piece of static status text. Clicking it (or
+// anywhere in its pane) opens the scan-mode menu.
 //
 class CWdsStatusBar final : public CMFCStatusBar
 {
+public:
+
+    // Designates which pane is drawn as the interactive drop-down. Pass 0 to
+    // turn the behaviour off and get an ordinary status bar back.
+    void SetDropDownPane(const UINT paneId) { m_dropDownPaneId = paneId; }
+
+    // Sets the drop-down pane's label, sizing the pane so the chip fits the text
+    // plus its padding and chevron; measured with the status bar's own font.
+    // Returns whether anything changed (and therefore whether the bar relaid out).
+    bool SetDropDownPaneText(const std::wstring& text);
+
+    // The exact colour the visual manager paints ordinary pane text with. The
+    // chip's label uses this so it is never a different shade of grey than the
+    // panes beside it, whatever the visual manager and theme decide.
+    COLORREF GetOrdinaryPaneTextColor() const;
+
+protected:
+
+    void OnDrawPane(CDC* pDC, CMFCStatusBarPaneInfo* pPane) override;
+    void DrawDropDownPane(CDC* pDC, const CMFCStatusBarPaneInfo* pPane) const;
+    void SetDropDownHot(bool hot);
+    int DropDownPaneIndex() const;
+    bool HitsDropDownPane(CPoint point) const;
+    int MeasureTextWidth(const std::wstring& text) const;
+
+    UINT m_dropDownPaneId = 0;    // ID of the pane drawn as a drop-down chip (0 = none)
+    int m_dropDownWidth = -1;     // Last width handed to SetPaneWidth (DPI dependent)
+    bool m_dropDownHot = false;   // Mouse is hovering the chip
+    bool m_dropDownOpen = false;  // The chip's menu is open, so it draws pressed
+    bool m_trackingMouse = false; // TrackMouseEvent is armed for WM_MOUSELEAVE
+
     DECLARE_MESSAGE_MAP()
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
+    afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+    afx_msg LRESULT OnMouseLeave(WPARAM, LPARAM);
+    afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message);
 };
 
 //
@@ -310,6 +347,9 @@ protected:
 public:
     static CMainFrame* Get() { return s_Singleton; }
     void ToggleScanMode();
+    bool SetScanMode(bool scanForDuplicates);
+    bool ShowScanModeMenu(CWnd* anchor, const CRect& paneRect);
+    void LayoutStatusProgress();
     void UpdateFrameTitleForScan(LPCWSTR scanName);
     void UpdateAllPanes(CWnd* sender, MODEL_CHANGE change, CItem* item);
     void RebuildToolBar();

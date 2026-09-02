@@ -21,6 +21,7 @@
 #include "TreeMapView.h"
 #include "CsvLoader.h"
 #include "HashCache.h"
+#include "HangDump.h"
 
 CIconHandler* GetIconHandler()
 {
@@ -441,6 +442,11 @@ BOOL CDirStatApp::InitInstance()
         return FALSE;
     }
 
+    // Start the hang/crash watchdog now that the main window exists. It pings the
+    // main frame's message queue and writes a diagnostic minidump if the UI thread
+    // stops responding (see HangDump.h for behaviour and environment overrides).
+    HangDump::Install(m_pMainWnd->GetSafeHwnd());
+
     CWinDirStatModel::Get()->ResetScan();
     CMainFrame::Get()->RebuildToolBar();
     CMainFrame::Get()->InitialShowWindow(m_nCmdShow);
@@ -510,6 +516,10 @@ BOOL CDirStatApp::InitInstance()
 
 int CDirStatApp::ExitInstance()
 {
+    // Stop the hang watchdog before shutdown so it cannot misfire on the normal
+    // teardown (which intentionally does not pump messages).
+    HangDump::Uninstall();
+
     // Let the framework finish its normal shutdown first so all persistent state is
     // flushed: options, column widths and window placement are written by the frame's
     // OnDestroy handler, toolbar/docking layout by CWinAppEx, and the duplicate-hash

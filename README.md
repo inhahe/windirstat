@@ -43,6 +43,40 @@ If you prefer a manual installer, need a portable archive, or want to browse old
 | [WinDirStat.zip](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat.zip) | Portable use, testing, or running without an installer | Zip archive containing the WinDirStat executables. Extract it first, then run the executable for your CPU type. |
 | [WinDirStat.7z](https://github.com/windirstat/windirstat/releases/latest/download/WinDirStat.7z) | Portable use when you already have 7-Zip installed | Same kind of portable executable archive as the zip file, usually with a smaller download size. |
 
+## Fork enhancements
+
+This fork extends the stock WinDirStat 2.x experience with a modernized interface, faster and more responsive scanning, and persistent duplicate-scan state. All of the behaviors below can be changed from **Options**; the defaults listed here are what a fresh install uses.
+
+### Interface
+
+* **Office-style tabbed ribbon (default).** The classic menu bar and toolbar are replaced by a tabbed ribbon that groups related commands into panels (File, Edit, Clean Up, View, Tools, Options, Help). Long command groups such as Clean Up collapse into drop-down buttons. You can switch back to the classic menu from **Options ▸ Ribbon Interface**.
+* **Windows 7 visual style** for the ribbon, with command icons, an Office-style large/small button hierarchy, and check-box rendering for toggle commands.
+* **Readable dark mode.** The ribbon uses flat, dark-aware styling so tab and command text is legible on dark backgrounds instead of black-on-grey.
+* **Exact-byte sizes (default).** Sizes are shown as plain byte counts with no `KB`/`MB`/`GB` suffix and no trailing `" bytes"`. Re-enable rounded suffixes from **Options ▸ Use Size Suffixes**.
+* **Sortable timestamps (default).** File times are formatted as `YYYY-MM-DD HH:MM PM`.
+* **Corrected Percentage column.** The Percentage column now shows an actual percentage value instead of the malformed figure it displayed before.
+* **Fixed-width stat columns.** Right-aligned numeric and timestamp columns are drawn in a monospaced font so digits line up, and are measured so their data is never clipped.
+* **Columns auto-fit** the window and their content when a scan completes.
+* **Cleaner size-proportion column.** Every proportion bar is drawn flush to the column's left edge (previously child rows were indented and narrower than the header row).
+* **Scan-mode selector in the status bar.** The left end of the status bar shows the current scan mode (`Mode: Normal` or `Mode: Duplicates`) as a drop-down button — a framed chip with a chevron that highlights on hover — and clicking it opens a menu to switch modes. Switching *to* duplicate mode asks for confirmation first, because hashes are only produced while scanning and the scan must therefore start over; switching *away* from it keeps the current results and simply retires the Duplicates tab.
+
+### Scanning and responsiveness
+
+* **Immediate hierarchy.** The selected drive or folder expands right away instead of only after the MFT preload finishes, and selecting multiple drives no longer force-expands all of them.
+* **Provisional values while scanning (default).** Directories whose totals are still being computed show their in-progress Percentage, Physical Size, Logical Size, and Files values highlighted in grey. Turning off **Highlight unfinished values** instead shows a `Working…` placeholder until each item is done.
+* **No Pac-Man.** The floating Pac-Man animation is disabled by default, and the status-bar Pac-Man is replaced by a progress bar.
+* **Cancellable scans.** Long NTFS MFT reads poll for cancellation, so Stop and window-close respond promptly, and shutdown is faster.
+* **Thread-safe MFT parsing.** The parallel MFT reader serializes its shared record map, fixing a crash that could take the window down mid-scan on volumes whose file records span several MFT extents.
+
+### Persistent duplicate scans
+
+* **Durable hash cache.** Partial and full file hashes are stored across sessions, so a later duplicate scan can resume instead of rehashing everything. Hashes are also persisted inside saved scans, and the Duplicates view is rebuilt when such a scan is reloaded. As with stock WinDirStat, files are only hashed when two or more share the same size.
+* **USN-journal cache invalidation.** On NTFS volumes the change journal is used to precisely drop cache entries for files that changed, were deleted, or were renamed since the cache was written, so resumed scans stay correct.
+
+### Elevation
+
+* **Auto-elevate on startup** works independently of the elevation prompt. Running elevated grants direct MFT access for faster NTFS scanning and enables privileged cleanup actions (for example creating volume shadow copies).
+
 ## Copyright / Licenses
 
 * Copyright © WinDirStat Team ([windirstat.net](https://windirstat.net/))

@@ -33,10 +33,10 @@
 #include "PagePrompts.h"
 #include "ProgressDlg.h"
 
-constexpr auto ID_STATUSPANE_IDLE_INDEX = 0;
-constexpr auto ID_STATUSPANE_SIZE_INDEX = 1;
-constexpr auto ID_STATUSPANE_RAM_INDEX = 2;
-constexpr auto ID_STATUSPANE_MODE_INDEX = 3;
+constexpr auto ID_STATUSPANE_MODE_INDEX = 0;
+constexpr auto ID_STATUSPANE_IDLE_INDEX = 1;
+constexpr auto ID_STATUSPANE_SIZE_INDEX = 2;
+constexpr auto ID_STATUSPANE_RAM_INDEX = 3;
 constexpr auto ID_INACTIVE_GRAPH_PANE = 0xEB00; // Outside MFC's control-bar and splitter-pane ID ranges.
 
 static void SetNativeMenuRadio(CCmdUI* command, const bool checked)
@@ -397,48 +397,401 @@ void CMainFrame::UpdatePaneText()
         std::format(L"{}: \u2211 {}", Localization::Lookup(COptions::TreeMapUseLogical ? IDS_COL_SIZE_LOGICAL : IDS_COL_SIZE_PHYSICAL), FormatBytes(size)), 175);
     SetStatusPaneText(dc, ID_STATUSPANE_RAM_INDEX, CDirStatApp::GetCurrentProcessMemoryInfo(), 175);
 
-    // Show scan mode (Normal vs Duplicates) — clickable to toggle
-    const std::wstring modeText = Localization::Lookup(
-        COptions::ScanForDuplicates ? IDS_SCAN_MODE_DUPLICATES : IDS_SCAN_MODE_NORMAL);
-    SetStatusPaneText(dc, ID_STATUSPANE_MODE_INDEX, modeText, 140);
+    // Scan mode (Normal vs Duplicates). Drawn by CWdsStatusBar as a drop-down
+    // chip, so it sizes itself rather than going through SetStatusPaneText. The
+    // chip sits left of the stretchy idle pane, so a width change moves that
+    // pane - and with it the progress bar parented to the status bar.
+    if (m_wndStatusBar.SetDropDownPaneText(Localization::Lookup(
+        COptions::ScanForDuplicates ? IDS_SCAN_MODE_DUPLICATES : IDS_SCAN_MODE_NORMAL)))
+    {
+        LayoutStatusProgress();
+    }
 }
 
-// CWdsStatusBar — forwards clicks on the mode pane to CMainFrame::ToggleScanMode().
+// Keeps the status bar's progress control aligned with the (stretchy) idle pane.
+void CMainFrame::LayoutStatusProgress()
+{
+    if (!IsWindow(m_wndStatusBar.m_hWnd) || m_progress.m_hWnd == nullptr) return;
+
+    CRect rc;
+    m_wndStatusBar.GetItemRect(ID_STATUSPANE_IDLE_INDEX, rc);
+    rc.DeflateRect(DpiRest(3, &m_wndStatusBar), DpiRest(4, &m_wndStatusBar),
+        DpiRest(5, &m_wndStatusBar), DpiRest(4, &m_wndStatusBar));
+    m_progress.MoveWindow(rc);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// CWdsStatusBar - the scan-mode pane, drawn as a clickable drop-down chip.
+
+namespace
+{
+    // Perceived brightness (ITU-R BT.601). Used only to decide which direction
+    // "more contrast than the background" is, so the chip stands out on a light
+    // status bar and on a dark one without hard-coding either palette.
+    bool IsDarkColor(const COLORREF color) noexcept
+    {
+        return (GetRValue(color) * 299 + GetGValue(color) * 587 + GetBValue(color) * 114) / 1000 < 128;
+    }
+
+    COLORREF ShiftColor(const COLORREF color, const int amount) noexcept
+    {
+        const auto channel = [amount](const int value) noexcept
+        {
+            return static_cast<BYTE>(std::clamp(value + amount, 0, 255));
+        };
+        return RGB(channel(GetRValue(color)), channel(GetGValue(color)), channel(GetBValue(color)));
+    }
+
+    // Chip metrics, in unscaled pixels (run through DpiRest before use).
+    constexpr int ChipInsetX = 3;   // Gap between the pane edge and the chip
+    constexpr int ChipInsetY = 2;   // Gap above and below the chip
+    constexpr int ChipRadius = 4;   // Corner rounding
+    constexpr int ChipPadX = 8;     // Padding between the chip frame and its content
+    constexpr int ChevronGap = 6;   // Gap between the label and the chevron
+    constexpr int ChevronHalfW = 4; // Half the chevron's width
+    constexpr int ChevronH = 3;     // Chevron height
+    constexpr int ChipSlack = 6;    // GetTextExtent can under-measure what DrawText needs
+}
+
 BEGIN_MESSAGE_MAP(CWdsStatusBar, CMFCStatusBar)
     ON_WM_LBUTTONDOWN()
+    ON_WM_MOUSEMOVE()
+    ON_WM_SETCURSOR()
+    ON_MESSAGE(WM_MOUSELEAVE, &CWdsStatusBar::OnMouseLeave)
 END_MESSAGE_MAP()
+
+int CWdsStatusBar::DropDownPaneIndex() const
+{
+    return m_dropDownPaneId == 0 ? -1 : CommandToIndex(m_dropDownPaneId);
+}
+
+bool CWdsStatusBar::HitsDropDownPane(const CPoint point) const
+{
+    const int index = DropDownPaneIndex();
+    if (index < 0) return false;
+
+    CRect rect;
+    GetItemRect(index, rect);
+    return rect.PtInRect(point) != FALSE;
+}
+
+int CWdsStatusBar::MeasureTextWidth(const std::wstring& text) const
+{
+    // The status bar has its own font; measuring with the frame's DC (which is
+    // what the ordinary panes do) undersizes the pane whenever the two differ.
+    CClientDC dc(const_cast<CWdsStatusBar*>(this));
+    const HGDIOBJ oldFont = dc.SelectObject(GetCurrentFont());
+    const int width = dc.GetTextExtent(text.c_str(), static_cast<int>(text.size())).cx;
+    dc.SelectObject(oldFont);
+    return width;
+}
+
+bool CWdsStatusBar::SetDropDownPaneText(const std::wstring& text)
+{
+    const int index = DropDownPaneIndex();
+    if (index < 0) return false;
+
+    // The width is recomputed on every call rather than cached against the label,
+    // because it also depends on the bar's DPI - and the DPI is not yet final when
+    // the first label is set from CMainFrame::OnCreate (the frame has not been
+    // positioned on its monitor yet, so GetDpiForWindow still answers 96). Caching
+    // on the label alone froze a 96-DPI width into a 144-DPI bar and the label came
+    // out ellipsised. Recomputing also covers the window being dragged between
+    // monitors of different scaling.
+    const int width = MeasureTextWidth(text) +
+        DpiRest(2 * (ChipInsetX + ChipPadX) + ChevronGap + 2 * ChevronHalfW + ChipSlack, this);
+
+    // UpdatePaneText runs off the display timer, so this is reached several times a
+    // second; only touch the bar when something actually moved.
+    if (width == m_dropDownWidth && GetPaneText(index) == text.c_str()) return false;
+
+    m_dropDownWidth = width;
+    SetPaneWidth(index, width);
+    SetPaneText(index, text.c_str());
+    return true;
+}
+
+COLORREF CWdsStatusBar::GetOrdinaryPaneTextColor() const
+{
+    // Ask the visual manager the same question it is asked while painting a
+    // normal pane, passing a real neighbouring pane, so the chip's label always
+    // comes out the identical shade to the text beside it - whatever the visual
+    // manager and theme decide, in light mode and in dark.
+    //
+    // Panes MFC considers disabled (SBPS_DISABLED, which it applies to any pane
+    // whose indicator ID has no command handler) are painted in a washed-out
+    // grey. Prefer a pane that is not disabled so the chip - which is very much
+    // enabled, being the one thing on this bar you can click - never renders in
+    // the greyed shade while its neighbours render in the normal one.
+    auto paneColor = [this](CMFCStatusBarPaneInfo* pane)
+    {
+        return CMFCVisualManager::GetInstance()->GetStatusBarPaneTextColor(
+            const_cast<CWdsStatusBar*>(this), pane);
+    };
+
+    CMFCStatusBarPaneInfo* fallback = nullptr;
+    for (const int i : std::views::iota(0, GetCount()))
+    {
+        CMFCStatusBarPaneInfo* pane = _GetPanePtr(i);
+        if (pane == nullptr || pane->nID == m_dropDownPaneId) continue;
+        if ((pane->nStyle & SBPS_DISABLED) == 0) return paneColor(pane);
+        if (fallback == nullptr) fallback = pane;
+    }
+
+    return fallback != nullptr ? paneColor(fallback) : GetGlobalData()->clrBtnText;
+}
+
+void CWdsStatusBar::OnDrawPane(CDC* pDC, CMFCStatusBarPaneInfo* pPane)
+{
+    if (pPane == nullptr || m_dropDownPaneId == 0 || pPane->nID != m_dropDownPaneId)
+    {
+        CMFCStatusBar::OnDrawPane(pDC, pPane);
+        return;
+    }
+
+    DrawDropDownPane(pDC, pPane);
+}
+
+void CWdsStatusBar::DrawDropDownPane(CDC* pDC, const CMFCStatusBarPaneInfo* pPane) const
+{
+    ASSERT_VALID(pDC);
+
+    const CRect rectPane(pPane->rect);
+    if (rectPane.IsRectEmpty() || !pDC->RectVisible(rectPane)) return;
+
+    // The same explicit background fill the stock pane painter performs.
+    if (pPane->clrBackground != static_cast<COLORREF>(-1))
+    {
+        pDC->FillSolidRect(rectPane, pPane->clrBackground);
+    }
+
+    // Shade the chip relative to whatever the bar was actually painted with:
+    // DoPaint draws the bar background into this DC before the panes, so reading
+    // it back beats guessing at a palette the visual manager owns.
+    COLORREF back = pPane->clrBackground;
+    if (back == static_cast<COLORREF>(-1))
+    {
+        back = pDC->GetPixel(rectPane.left + 1, rectPane.CenterPoint().y);
+        if (back == CLR_INVALID) back = GetGlobalData()->clrBarFace;
+    }
+
+    const int direction = IsDarkColor(back) ? 1 : -1;
+    const COLORREF frame = ShiftColor(back, direction * (m_dropDownHot || m_dropDownOpen ? 78 : 48));
+    const COLORREF fill = ShiftColor(back, direction *
+        (m_dropDownOpen ? 42 : m_dropDownHot ? 26 : 10));
+
+    // The resting label colour matches the neighbouring panes exactly; hover and
+    // pressed lift it for the extra contrast the highlighted fill wants.
+    COLORREF label = GetOrdinaryPaneTextColor();
+    if (m_dropDownHot || m_dropDownOpen) label = ShiftColor(label, direction * 60);
+
+    CRect chip(rectPane);
+    chip.DeflateRect(DpiRest(ChipInsetX, this), DpiRest(ChipInsetY, this));
+    if (chip.IsRectEmpty()) return;
+
+    CBrush chipBrush(fill);
+    CPen chipPen(PS_SOLID, 1, frame);
+    CBrush* const oldBrush = pDC->SelectObject(&chipBrush);
+    CPen* const oldPen = pDC->SelectObject(&chipPen);
+    const int radius = DpiRest(ChipRadius, this);
+    pDC->RoundRect(chip, CPoint(radius, radius));
+    pDC->SelectObject(oldBrush);
+    pDC->SelectObject(oldPen);
+
+    // Chevron on the right; the label gets the space that is left.
+    const int chevronHalfWidth = DpiRest(ChevronHalfW, this);
+    const int chevronHeight = DpiRest(ChevronH, this);
+    const int chevronCenterX = chip.right - DpiRest(ChipPadX, this) - chevronHalfWidth;
+    const int chevronCenterY = chip.CenterPoint().y;
+
+    CRect rectText(chip);
+    rectText.left += DpiRest(ChipPadX, this);
+    rectText.right = chevronCenterX - chevronHalfWidth - DpiRest(ChevronGap, this);
+
+    if (pPane->lpszText != nullptr && !rectText.IsRectEmpty())
+    {
+        const COLORREF oldColor = pDC->SetTextColor(label);
+        pDC->DrawText(pPane->lpszText, static_cast<int>(wcslen(pPane->lpszText)), rectText,
+            DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
+        pDC->SetTextColor(oldColor);
+    }
+
+    POINT chevron[3]
+    {
+        { chevronCenterX - chevronHalfWidth, chevronCenterY - chevronHeight / 2 },
+        { chevronCenterX + chevronHalfWidth, chevronCenterY - chevronHeight / 2 },
+        { chevronCenterX, chevronCenterY + chevronHeight - chevronHeight / 2 }
+    };
+
+    CBrush arrowBrush(label);
+    CPen arrowPen(PS_SOLID, 1, label);
+    CBrush* const oldArrowBrush = pDC->SelectObject(&arrowBrush);
+    CPen* const oldArrowPen = pDC->SelectObject(&arrowPen);
+    pDC->Polygon(chevron, static_cast<int>(std::ssize(chevron)));
+    pDC->SelectObject(oldArrowBrush);
+    pDC->SelectObject(oldArrowPen);
+}
+
+void CWdsStatusBar::SetDropDownHot(const bool hot)
+{
+    if (m_dropDownHot == hot) return;
+
+    m_dropDownHot = hot;
+    if (const int index = DropDownPaneIndex(); index >= 0) InvalidatePaneContent(index);
+}
 
 void CWdsStatusBar::OnLButtonDown(const UINT nFlags, const CPoint point)
 {
-    // Check whether the click hit the mode pane
-    CRect rc;
-    GetItemRect(ID_STATUSPANE_MODE_INDEX, rc);
-    if (rc.PtInRect(point))
+    if (!HitsDropDownPane(point))
     {
-        CMainFrame::Get()->ToggleScanMode();
+        CMFCStatusBar::OnLButtonDown(nFlags, point);
         return;
     }
-    CMFCStatusBar::OnLButtonDown(nFlags, point);
+
+    const int index = DropDownPaneIndex();
+    CRect rect;
+    GetItemRect(index, rect);
+
+    // Keep the chip drawn pressed for as long as its menu is on screen.
+    m_dropDownOpen = true;
+    InvalidatePaneContent(index);
+    UpdateWindow();
+
+    CMainFrame::Get()->ShowScanModeMenu(this, rect);
+
+    m_dropDownOpen = false;
+
+    // The pointer is usually elsewhere once the menu closes, and a click that
+    // never moved it produces no WM_MOUSEMOVE, so recheck the hover state.
+    CPoint cursor;
+    GetCursorPos(&cursor);
+    ScreenToClient(&cursor);
+    m_dropDownHot = HitsDropDownPane(cursor);
+
+    // Always repaint, even when the mode changed and the label already forced a
+    // relayout: that repaint ran from inside the menu loop, while the chip was
+    // still flagged open, so it painted the pressed shade. Without this the chip
+    // stays looking pressed until something else happens to invalidate it.
+    InvalidatePaneContent(index);
+}
+
+void CWdsStatusBar::OnMouseMove(const UINT nFlags, const CPoint point)
+{
+    SetDropDownHot(HitsDropDownPane(point));
+
+    if (m_dropDownHot && !m_trackingMouse)
+    {
+        TRACKMOUSEEVENT track{ .cbSize = sizeof(TRACKMOUSEEVENT), .dwFlags = TME_LEAVE, .hwndTrack = m_hWnd };
+        m_trackingMouse = TrackMouseEvent(&track) != FALSE;
+    }
+
+    CMFCStatusBar::OnMouseMove(nFlags, point);
+}
+
+LRESULT CWdsStatusBar::OnMouseLeave(WPARAM, LPARAM)
+{
+    m_trackingMouse = false;
+    SetDropDownHot(false);
+    return 0;
+}
+
+BOOL CWdsStatusBar::OnSetCursor(CWnd* pWnd, const UINT nHitTest, const UINT message)
+{
+    CPoint cursor;
+    if (GetCursorPos(&cursor))
+    {
+        ScreenToClient(&cursor);
+        if (HitsDropDownPane(cursor))
+        {
+            SetCursor(LoadCursor(nullptr, IDC_HAND));
+            return TRUE;
+        }
+    }
+
+    return CMFCStatusBar::OnSetCursor(pWnd, nHitTest, message);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+// Pops a small menu anchored to the mode chip so the user can see both scan
+// modes (and which one is active) rather than having to guess that the pane
+// toggles when clicked. Returns whether the mode actually changed.
+bool CMainFrame::ShowScanModeMenu(CWnd* anchor, const CRect& paneRect)
+{
+    constexpr UINT ID_MODE_NORMAL = 1;
+    constexpr UINT ID_MODE_DUPLICATES = 2;
+
+    CMenu menu;
+    menu.CreatePopupMenu();
+    menu.AppendMenu(MF_STRING, ID_MODE_NORMAL,
+        Localization::Lookup(IDS_SCAN_MODE_MENU_NORMAL).c_str());
+    menu.AppendMenu(MF_STRING, ID_MODE_DUPLICATES,
+        Localization::Lookup(IDS_SCAN_MODE_MENU_DUPLICATES).c_str());
+    menu.CheckMenuRadioItem(ID_MODE_NORMAL, ID_MODE_DUPLICATES,
+        COptions::ScanForDuplicates ? ID_MODE_DUPLICATES : ID_MODE_NORMAL, MF_BYCOMMAND);
+
+    // Anchor to the top-left of the pane; the menu opens upward over the bar.
+    CRect screenRect = paneRect;
+    anchor->ClientToScreen(&screenRect);
+    const UINT cmd = menu.TrackPopupMenu(
+        TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_RETURNCMD | TPM_NONOTIFY,
+        screenRect.left, screenRect.top, this);
+
+    if (cmd != ID_MODE_NORMAL && cmd != ID_MODE_DUPLICATES) return false;
+    return SetScanMode(cmd == ID_MODE_DUPLICATES);
 }
 
 void CMainFrame::ToggleScanMode()
 {
-    const bool wasDuplicates = COptions::ScanForDuplicates;
-    COptions::ScanForDuplicates = !wasDuplicates;
+    SetScanMode(!COptions::ScanForDuplicates);
+}
 
-    // Update the status bar immediately
+// Switches between the plain size scan and the duplicate-detection scan.
+// Returns whether the mode actually changed.
+bool CMainFrame::SetScanMode(const bool scanForDuplicates)
+{
+    // Ignore no-op selections so a scan is never needlessly disturbed.
+    if (scanForDuplicates == COptions::ScanForDuplicates) return false;
+
+    CWinDirStatModel* model = CWinDirStatModel::Get();
+    const bool hasResults = model->GetRootItem() != nullptr;
+
+    // Turning duplicate detection ON needs every file hashed, and hashes are only
+    // produced while scanning - so the scan has to run again from the start. That
+    // throws away the current results and can take a long while on a big volume,
+    // so confirm it rather than acting on a stray click.
+    if (scanForDuplicates && hasResults &&
+        CMessageBoxDlg::Show(Localization::Lookup(IDS_SCAN_MODE_RESCAN_PROMPT),
+            MB_YESNO | MB_ICONQUESTION, this) != IDYES)
+    {
+        return false;
+    }
+
+    COptions::ScanForDuplicates = scanForDuplicates;
     UpdatePaneText();
 
-    // Show/hide the Duplicates tab according to the new mode
-    GetFileTabbedView()->SetDupeTabVisibility(
-        COptions::ScanForDuplicates && CWinDirStatModel::Get()->GetRootItem() != nullptr);
-
-    // If a scan is in progress or completed, restart it so the duplicate
-    // detection engine runs (or stops running) on every file.
-    if (CWinDirStatModel::Get()->GetRootItem() != nullptr)
+    if (!scanForDuplicates)
     {
-        CWinDirStatModel::Get()->StartScan(CWinDirStatModel::Get()->GetScanPathSpec());
+        // Turning it OFF needs no rescan: everything the other views show has
+        // already been collected, and duplicate detection simply stops feeding
+        // the Duplicates tab. Retire the tab and leave the scan alone.
+        //
+        // The accumulated duplicate state is deliberately *not* cleared here:
+        // scanning threads call CFileDupeControl::ProcessDuplicate, so tearing
+        // its trackers down from the UI thread mid-scan would race with them.
+        // The next scan's ClearScanState does that safely once the workers idle.
+        GetFileTabbedView()->SetDupeTabVisibility(false);
+        return true;
     }
+
+    if (hasResults)
+    {
+        // StartScan publishes MODEL_CHANGE_NEW_ROOT, which is what makes the
+        // Duplicates tab appear, so no explicit tab work is needed here.
+        model->StartScan(model->GetScanPathSpec());
+    }
+
+    return true;
 }
 
 void CMainFrame::OnUpdateEnableControl(CCmdUI* pCmdUI)
@@ -449,22 +802,7 @@ void CMainFrame::OnUpdateEnableControl(CCmdUI* pCmdUI)
 void CMainFrame::OnSize(const UINT nType, const int cx, const int cy)
 {
     CFrameWndEx::OnSize(nType, cx, cy);
-
-    if (!IsWindow(m_wndStatusBar.m_hWnd))
-    {
-        return;
-    }
-
-    CRect rc;
-    m_wndStatusBar.GetItemRect(ID_STATUSPANE_IDLE_INDEX, rc);
-
-    if (m_progress.m_hWnd != nullptr)
-    {
-        CRect progRc = rc;
-        progRc.DeflateRect(DpiRest(3, &m_wndStatusBar), DpiRest(4, &m_wndStatusBar),
-            DpiRest(5, &m_wndStatusBar), DpiRest(4, &m_wndStatusBar));
-        m_progress.MoveWindow(progRc);
-    }
+    LayoutStatusProgress();
 }
 
 /////////////////////////////////////////////////////////////////////////////
