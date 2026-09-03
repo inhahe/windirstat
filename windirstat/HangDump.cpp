@@ -105,7 +105,22 @@ namespace
         ::CloseClipboard();
     }
 
-    void NotifyDumpWritten(const std::wstring& path)
+    // Asks the monitored UI thread to acknowledge a no-op message. WM_NULL is
+    // handled instantly by a thread that is pumping, so a timeout (or
+    // SMTO_ABORTIFHUNG tripping the system's "not responding" flag) means it is
+    // not pumping. Returns true when there is nothing to judge, so callers treat
+    // "no window" as "not hung".
+    bool IsUiResponsive(const DWORD timeoutMs)
+    {
+        const HWND hwnd = g_hwndToMonitor.load();
+        if (hwnd == nullptr || !::IsWindow(hwnd)) return true;
+
+        DWORD_PTR result = 0;
+        return ::SendMessageTimeout(hwnd, WM_NULL, 0, 0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &result) != 0;
+    }
+
+    void NotifyDumpWritten(const std::wstring& path, const ULONGLONG stalledMs)
     {
         if (EnvEnabled(L"WDS_HANGDUMP_SILENT")) return;
 
@@ -122,6 +137,8 @@ namespace
         };
 
         const std::wstring content =
+            L"The window has not processed any messages for " +
+            std::to_wstring(stalledMs / 1000) + L" seconds.\n\n"
             L"A diagnostic dump was written to:\n" + path +
             L"\n\nPlease attach this file when reporting the hang.";
 
@@ -148,6 +165,8 @@ namespace
             // TaskDialog unavailable; fall back to plain MessageBox.
             const std::wstring message =
                 L"WinDirStat appears to have stopped responding.\n\n"
+                L"The window has not processed any messages for " +
+                std::to_wstring(stalledMs / 1000) + L" seconds.\n\n"
                 L"A diagnostic dump was written to:\n" + path +
                 L"\n\nPlease attach this file when reporting the hang.";
             ::MessageBox(nullptr, message.c_str(), L"WinDirStat diagnostics",
@@ -172,14 +191,7 @@ namespace
             const HWND hwnd = g_hwndToMonitor.load();
             if (hwnd == nullptr || !::IsWindow(hwnd)) continue;
 
-            // WM_NULL is a no-op the UI thread handles instantly while it is
-            // pumping messages. If the send times out (or SMTO_ABORTIFHUNG trips
-            // the "not responding" flag) the UI thread is not pumping -> hung.
-            DWORD_PTR result = 0;
-            const LRESULT ok = ::SendMessageTimeout(hwnd, WM_NULL, 0, 0,
-                SMTO_ABORTIFHUNG | SMTO_BLOCK, pingTimeoutMs, &result);
-
-            if (ok != 0)
+            if (IsUiResponsive(pingTimeoutMs))
             {
                 // Responsive again; reset the episode so a later hang re-dumps.
                 hangStartTick = 0;
@@ -196,9 +208,33 @@ namespace
             {
                 // One dump per hang episode: capturing repeatedly while still
                 // wedged would just pile up huge files.
+                const ULONGLONG stalledMs = now - hangStartTick;
                 const std::wstring path = HangDump::WriteDump(L"hang");
                 dumpedThisEpisode = true;
-                if (!path.empty()) NotifyDumpWritten(path);
+                if (path.empty()) continue;
+
+                // Distinguish a stall from a hang before saying anything. Writing
+                // the dump takes a moment, and by the time it lands the window has
+                // often started responding again - the usual cause being that the
+                // whole desktop was waiting on a saturated disk, not that
+                // WinDirStat is wedged. Announcing "WinDirStat has stopped
+                // responding" in a topmost modal dialog *after* it has resumed
+                // reads like a crash report for a program that is working fine,
+                // and the dialog is itself more disruptive than the stall was. So
+                // keep the dump (it is what diagnoses the stall) but only speak up
+                // while the window is genuinely still wedged, which is when the
+                // user is actually staring at a frozen window and wants to know
+                // why. WDS_HANGDUMP_NOTIFY_ALWAYS=1 restores the old behaviour for
+                // anyone deliberately hunting transient stalls.
+                if (!EnvEnabled(L"WDS_HANGDUMP_NOTIFY_ALWAYS") &&
+                    IsUiResponsive(pingTimeoutMs))
+                {
+                    VTRACE(L"HangDump: UI stalled {} ms then recovered; dump kept at {}",
+                        stalledMs, path);
+                    continue;
+                }
+
+                NotifyDumpWritten(path, stalledMs);
             }
         }
 

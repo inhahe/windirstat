@@ -48,6 +48,18 @@
 //                          memory + handle dump, which is enough to see a
 //                          deadlock and stays small.
 //   WDS_HANGDUMP_SILENT    "1" suppresses the "dump written" message box.
+//   WDS_HANGDUMP_NOTIFY_ALWAYS
+//                          "1" notifies even for a stall the window recovered
+//                          from. See the stall/hang note below.
+//
+// Stall versus hang. Crossing the threshold writes a dump either way, but the
+// user is only told about it if the window is *still* unresponsive once the dump
+// has been written. A stall the window recovers from on its own is usually not a
+// WinDirStat defect at all - the common cause is the whole desktop waiting on a
+// saturated disk - and a topmost modal dialog announcing that the program has
+// stopped responding, shown after it has resumed, reads like a crash report for a
+// program that is working. The dump is kept regardless, so a recovered stall can
+// still be analysed after the fact; it is only the interruption that is withheld.
 //
 namespace HangDump
 {
