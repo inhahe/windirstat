@@ -11,3 +11,13 @@ intermediate/
 *.vcxproj.user
 *.lastcodeanalysissucceeded
 *_combined.txt
+
+# Local-only. We publish straight from this directory now instead of copying a
+# subset into D:\github.
+publish-to-github.bat
+WinDirStat-x64.msi
+WinDirStat_x64.exe
+WinDirStat_x64.pdb
+*.msi
+*.pdb
+.claude/
